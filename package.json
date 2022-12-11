@@ -20,7 +20,7 @@
     "@types/three": "^0.143.0",
     "@typescript-eslint/eslint-plugin": "^5.43.0",
     "@typescript-eslint/parser": "^5.43.0",
-    "cannon-es": "^0.19.0",
+    "cannon-es": "^0.20.0",
     "dat.gui": "^0.7.9",
     "eslint": "^8.28.0",
     "eslint-config-standard-with-typescript": "^23.0.0",
@@ -39,6 +39,7 @@
     "webpack-merge": "^5.8.0"
   },
   "dependencies": {
+    "@dimforge/rapier3d": "^0.10.0",
     "@mediapipe/hands": "^0.4.1646424915",
     "@mediapipe/pose": "^0.5.1635988162",
     "@tensorflow-models/hand-pose-detection": "^2.0.0",
@@ -56,6 +57,7 @@
     "raw-loader": "^4.0.2",
     "stats.js": "^0.17.0",
     "style-loader": "^3.3.1",
-    "three-dots": "^0.2.3"
+    "three-dots": "^0.2.3",
+    "three-to-cannon": "^4.3.0"
   }
 }
