@@ -1,17 +1,24 @@
-import { Mesh, MeshToonMaterial, Object3D, SphereGeometry } from "three"
-import * as CANNON from "cannon-es"
+import { Mesh, MeshToonMaterial, Object3D, SphereGeometry, Vector3 } from "three"
+import RAPIER from "@dimforge/rapier3d-compat"
 
 class SnowBall {
     object: Object3D
-    body: CANNON.Body
+    body: RAPIER.RigidBody
+    collider: RAPIER.Collider
+    shouldRotate = false
   
-    constructor() {
+    constructor(world: RAPIER.World, initialPosition: Vector3) {
         const snowBallRadius = 0.5
-        this.body = new CANNON.Body({
-            mass: 1,
-            shape: new CANNON.Sphere(0.1),
-            position: new CANNON.Vec3(0, 0, 0)
-        })
+        this.body = world.createRigidBody(
+            RAPIER.RigidBodyDesc.dynamic()
+                .setLinearDamping(0.1)
+                .setTranslation(initialPosition.x, initialPosition.y, initialPosition.z)
+                .setGravityScale(0.0)
+        )
+
+        this.collider = world.createCollider(
+            RAPIER.ColliderDesc.ball(snowBallRadius)
+                .setMass(1), this.body)
 
         this.object = new Mesh(
             new SphereGeometry(snowBallRadius, 32, 32),
@@ -24,10 +31,8 @@ class SnowBall {
 
 const throwSnowBall = (
     snowBall: SnowBall, 
-    origin: CANNON.Vec3, 
-    direction: CANNON.Vec3) => {
-    snowBall.body.position.set(origin.x, origin.y, origin.z)
-    snowBall.body.applyImpulse(direction, snowBall.body.position)
+    direction: RAPIER.Vector3) => {
+    snowBall.body.applyImpulse(direction, true)
 }
 
 export { SnowBall, throwSnowBall }

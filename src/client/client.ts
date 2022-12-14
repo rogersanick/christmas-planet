@@ -4,26 +4,27 @@ import {
     TextureLoader, Scene, Mesh, sRGBEncoding, SphereGeometry, 
     DirectionalLight, PerspectiveCamera, WebGLRenderer, PCFSoftShadowMap, 
     Clock, MeshPhysicalMaterial, BufferAttribute, AmbientLight, Vector3, 
-    ArrowHelper, Object3D, Group, Quaternion, Euler, FogExp2, Points
+    ArrowHelper, Object3D, Group, Quaternion, BoxGeometry, Box3, MeshBasicMaterial
 } from "three"
-import * as CANNON from "cannon-es"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import { SAPBroadphase, Vec3 } from "cannon-es"
-import CannonDebugRenderer from "./cannon/cannonDebugRenderer"
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader"
+import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader"
 import ChristmasPenguin from "./christmasPenguin"
 import { SnowBall, throwSnowBall } from "./snowBall"
 import Snow from "./snow"
+import { getRapier } from "./rapier"
+import RAPIER from "@dimforge/rapier3d-compat"
+import GiftBox from "./gift_box"
 
-// TODO: Fix camera rotation
-// TODO: Fix penguin rotation (less urgent)
+// TODO: Adjust camera scrolling
 // TODO: Enable snowball throwing
 // TODO: Simple bad guys
-// TODO: Add camera scroll
 
 // Enable Async
 (async () => {
 
     /** Initialzie and setup */
+    const RAPIER = await getRapier()
 
     // Loaders
     const gltfLoader = new GLTFLoader()
@@ -33,11 +34,11 @@ import Snow from "./snow"
     const gui = new GUI()
     const debugObject = {
         envMapIntensity: 5,
-        penguinSpeed: 20,
+        penguinSpeed: 15,
         zoom: 0.7,
         debugPhysics: false
     }
-    gui.add(debugObject, "penguinSpeed", 0, 100)
+    gui.add(debugObject, "penguinSpeed", 10, 30)
     gui.add(debugObject, "zoom", 0, 5)
  
     // Canvas
@@ -67,7 +68,7 @@ import Snow from "./snow"
     /**
      * Game Elements
      */
-    type GameElement = { body: CANNON.Body, object: Object3D }
+    type GameElement = { body: RAPIER.RigidBody, object: Object3D, shouldRotate: boolean }
     const gameElements: GameElement[] = []
     
     /** 
@@ -84,25 +85,18 @@ import Snow from "./snow"
     /** 
     * Physics
     */
-    const world = new CANNON.World()
-    world.broadphase = new SAPBroadphase(world)
-
-    // This is overriden in the animation function
-    world.gravity.set(0, 0, 0)
-    const debugRenderer = new CannonDebugRenderer(scene, world)
+    const world = new RAPIER.World({ x: 0.0, y: -9.81, z: 0.0 })
 
     /**
     * Planet Christmas
     */
-    const worldBodyMaterial = new CANNON.Material("ground")
     const worldRadius = 150
-    const worldPosition = new Vector3(0, 0, 0)
-    const worldBody = new CANNON.Body({
-        material: worldBodyMaterial,
-        mass: 0, // the planet has a mass of 1 kg
-        shape: new CANNON.Sphere(worldRadius)
-    })
-    world.addBody(worldBody)
+    const worldRigidBody = world.createRigidBody(
+        RAPIER.RigidBodyDesc.fixed()
+    )
+    world.createCollider(RAPIER.ColliderDesc.ball(worldRadius)
+        .setDensity(1)
+        .setRestitution(0.4), worldRigidBody)
 
     const colorTexture = textureLoader.load("/textures/angele-kamp-g8IEMx8p_z8-unsplash.jpg")
     colorTexture.encoding = sRGBEncoding
@@ -126,68 +120,100 @@ import Snow from "./snow"
     scene.add(worldMesh)
  
     /**
+     * Christmas Tree
+     */
+    const treeModel: Group = await new Promise((resolve, reject) => {
+        gltfLoader.load("/models/christmas_tree.glb", (obj) => {
+            resolve(obj.scene)
+        })
+    })
+    treeModel.position.y = worldRadius
+    treeModel.scale.set(3,3,3)
+    // scene.add(treeModel)
+
+    /**
+     * Snowman
+     */
+    const snowmanModel: Group = await new Promise((resolve, reject) => {
+        gltfLoader.load("/models/snow_girl.glb", (obj) => {
+            resolve(obj.scene)
+        })
+    })
+    snowmanModel.position.y = worldRadius + 2
+    snowmanModel.scale.set(3,3,3)
+    // scene.add(snowmanModel)
+
+    /** Gift */
+    const giftModel: Group = await new Promise((resolve, reject) => {
+        gltfLoader.load("/models/gift_box.gltf", (obj) => {
+            obj.scene.traverse( function( node ) {
+                if ( node instanceof Mesh ) { 
+                    node.castShadow = true 
+                    node.translateY(-1.4)
+                }
+            })
+            resolve(obj.scene)
+        })
+    })
+    console.log(giftModel)
+    const modelSize = new Box3().setFromObject(giftModel)
+    const size = modelSize.getSize(new Vector3())
+
+    const createGiftBox = (scale: number) => {
+        const giftBox = new GiftBox(giftModel, worldRadius, world, size.multiplyScalar(scale))
+        giftBox.object.scale.setScalar(scale)
+        gameElements.push(giftBox)
+        return giftBox
+    }
+    const track = createGiftBox(1)
+
+    /**
     * Penguin
     */
     const christmasPenguinModel: Group = await new Promise((resolve, reject) => {
         gltfLoader.load("/models/christmas_penguin_glTF.glb", (gltf) => {
             resolve(gltf.scene)
-            gltf.scene.scale.set(2,2,2)
+            gltf.scene.scale.set(1.5, 1.5, 1.5)
             gltf.scene.children[0].rotateX(-Math.PI/2)
             gltf.scene.children[0].rotateY(-Math.PI/2)
         })
     })
-    const christmasPenguin = new ChristmasPenguin(christmasPenguinModel, worldRadius)
+    const christmasPenguin = new ChristmasPenguin(christmasPenguinModel, worldRadius, world)
     gameElements.push(christmasPenguin)
 
     window.addEventListener("keydown", function(event) {
         if (event.shiftKey) {
             console.log(christmasPenguin.object.rotation.z)
             // Create and add a snowball
-            const snowBall = new SnowBall()
+            const snowBallPosition = christmasPenguin.object.position.clone()
+            snowBallPosition.y += 5
+            const snowBall = new SnowBall(world, snowBallPosition)
             scene.add(snowBall.object)
-            world.addBody(snowBall.body)
             gameElements.push(snowBall)
-
-            // Set the initial snowball position
-            const snowBallPosition = christmasPenguin.body.position.clone()
-            snowBallPosition.z += 3
 
             // Determine the snowball direction and throw
             const snowBallDirection = new Vector3()
             christmasPenguin.object.getWorldDirection(snowBallDirection)
             visualize(new Vector3().applyQuaternion(christmasPenguin.object.quaternion), christmasPenguin.object)
-            const test = new Vec3(snowBallDirection.x, snowBallDirection.y, snowBallDirection.z)
-            throwSnowBall(snowBall, snowBallPosition, test)
+            snowBallDirection.multiplyScalar(1000)
+            throwSnowBall(snowBall, new RAPIER.Vector3(snowBallDirection.x, snowBallDirection.y, snowBallDirection.z))
 
             // Cleanup after two seconds
             setTimeout(() => {
                 scene.remove(snowBall.object)
-                world.removeBody(snowBall.body)
+                world.removeCollider(snowBall.collider, false)
+                world.removeRigidBody(snowBall.body)
                 gameElements.splice(gameElements.indexOf(snowBall), 1)
             }, 2000)
         }
         applyForce(event.key, christmasPenguin.object, christmasPenguin.body)
     })
-
-
-    /** 
-     * Friction
-     */
-    const penguinWorldMaterial = new CANNON.ContactMaterial(
-        christmasPenguin.body.material!,
-        worldBody.material!,
-        {
-            friction: 10000,
-            restitution: 0.1,
-        }
-    )
-    world.addContactMaterial(penguinWorldMaterial)
         
 
     window.addEventListener("wheel", (e) =>
     {
-        const penguinDistanceToCenterOfPlanet = christmasPenguin.object.position.distanceTo(worldPosition)
-        const cameraDistanceToCenterOfPlanet = camera.position.distanceTo(worldPosition)
+        const penguinDistanceToCenterOfPlanet = christmasPenguin.object.position.distanceTo(worldMesh.position)
+        const cameraDistanceToCenterOfPlanet = camera.position.distanceTo(worldMesh.position)
         if (debugObject.zoom < 100 && penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet) {
             debugObject.zoom += e.deltaY * 0.0003
             gui.updateDisplay()
@@ -222,15 +248,19 @@ import Snow from "./snow"
         prevX = null
     })
 
-    
-    const applyForce = (inputKey: string, object: Object3D, body: CANNON.Body) => {
+    let jumpCount = 0
+    const applyForce = (inputKey: string, object: Object3D, body: RAPIER.RigidBody) => {
         // Calculate the new velocity based on the direction
         const direction = new Vector3()
-        const jumpVector = new Vector3().subVectors(
-            object.position, worldMesh.position).normalize()
-        const jumpCannonVector = new Vec3(jumpVector.x, jumpVector.y, jumpVector.z)
-        if (inputKey === " ") {
-            body.applyForce(jumpCannonVector.scale(3000))
+        if (inputKey === " " && jumpCount < 2) {
+            jumpCount++
+            const jumpVector = new Vector3().subVectors(
+                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 30)
+            const jumpCannonVector = new RAPIER.Vector3(jumpVector.x, jumpVector.y, jumpVector.z)
+            body.applyImpulse(jumpCannonVector, true)
+            setTimeout(() => {
+                jumpCount--
+            }, 1000)
         } else if (inputKey === "ArrowUp" || inputKey === "w") {
             direction.subVectors(object.position, camera.position).normalize()
         } else if (inputKey === "ArrowDown" || inputKey === "s") {
@@ -246,8 +276,8 @@ import Snow from "./snow"
         }
 
         // Update the object's velocity
-        body.applyForce(
-            new CANNON.Vec3(direction.x, direction.y, direction.z).scale(100))
+        direction.multiplyScalar(debugObject.penguinSpeed)
+        body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
     }
 
 
@@ -318,48 +348,63 @@ import Snow from "./snow"
     * Animate
     */
 
-    // Add all gameElements to world and scene
-    gameElements.forEach(({ object, body }) => {
+    new RAPIER.DebugRenderPipeline()
+    gameElements.forEach(({ object }) => {
         scene.add(object)
-        world.addBody(body)
     })
 
     // Get time related variables
     const clock = new Clock()
+    const waddleClockwise = true
+    let waddleClockwiseCount = 50
     const tick = () =>
     {
-        const deltaTime = clock.getDelta()
-
         // Step the physics world
-        world.step(1 / 60, deltaTime)
+        const deltaTime = clock.getDelta()
+        world.step()
 
         // Position the game elements
-        gameElements.forEach(({ object, body }) => {
+        gameElements.forEach(({ object, body, shouldRotate }) => {
 
             // Calculate the direction from the object to the origin
-            object.position.copy(new Vector3(body.position.x, 
-                body.position.y, body.position.z))
+            const bodyPosition = body.translation()
+            object.position.copy(new Vector3(bodyPosition.x, bodyPosition.y, bodyPosition.z))
+
+            // If they should rotate, rotate them
+            if (shouldRotate) {
+                const { x, y, z, w } = body.rotation()
+                object.quaternion.copy(new Quaternion(x, y, z, w))
+            }
 
             // Apply a gravitational force to the object, pulling it towards the origin
-            const direction = new Vector3().subVectors(new Vector3(0, 0, 0), object.position)
-            body.applyForce(
-                new CANNON.Vec3(direction.x, direction.y, direction.z),
-                new CANNON.Vec3(0, 0, 0)
-            )
+            const direction = new Vector3().subVectors(new Vector3(0, 0, 0), object.position).normalize()
+            direction.multiplyScalar(9.81)
+            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
         })
 
         // Get christmas game element properties
-        const { object, body } = christmasPenguin
+        const { object } = christmasPenguin
 
         // Rotate the penguin from the center of the earth
         const preserveZRotation = object.rotation.z
         object.lookAt(worldMesh.position.x, worldMesh.position.y, worldMesh.position.z)
         object.rotation.z = preserveZRotation
+
+        // Waddle the penguin if it's moving
+        if (waddleClockwise && waddleClockwiseCount > 100) {
+            christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * 0.01)
+            waddleClockwiseCount--
+        } 
+        
+        if (!waddleClockwise && waddleClockwiseCount < 100) {
+            christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * -0.01)
+            waddleClockwiseCount++
+        }
  
         // Update controls
         const newCameraVector = new Vector3().subVectors(object.position, worldMesh.position)
             .multiplyScalar(1.5).multiplyScalar(debugObject.zoom)
-        camera.position.set(newCameraVector.x, newCameraVector.y, newCameraVector.z + 20)
+        camera.position.set(newCameraVector.x, newCameraVector.y, newCameraVector.z + 30)
         camera.lookAt(object.position.x, object.position.y, object.position.z)
 
         // Snow
@@ -375,7 +420,6 @@ import Snow from "./snow"
         })
  
         // Render
-        debugRenderer.update()
         renderer.render(scene, camera)
         
  

@@ -3,6 +3,9 @@ const CopyWebpackPlugin = require("copy-webpack-plugin")
 const CompressionPlugin = require("compression-webpack-plugin")
 
 module.exports = {
+    experiments: {
+        asyncWebAssembly: true
+    },
     entry: "./src/client/client.ts",
     module: {
         rules: [
@@ -44,5 +47,5 @@ module.exports = {
     },
     devServer: {
         open: true
-    }
+    },
 }
