@@ -1,9 +1,9 @@
-import { Group, Object3D, Quaternion, Scene, Vector3 } from "three"
+import { Object3D, Quaternion, Scene, Vector3 } from "three"
 import RAPIER from "@dimforge/rapier3d-compat"
 import { RAPIER_SCALING_COEFFICIENT } from "./constants"
 
 /**
-  * Christmas Tree
+  * Physics Enabled Object
   */
 class PhysicsEnabledObject {
 

@@ -4,7 +4,7 @@ import {
     TextureLoader, Scene, Mesh, sRGBEncoding, SphereGeometry, 
     DirectionalLight, PerspectiveCamera, WebGLRenderer, PCFSoftShadowMap, 
     Clock, MeshPhysicalMaterial, BufferAttribute, AmbientLight, Vector3, 
-    ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, Vector2, Raycaster
+    ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, Vector2, Raycaster, PointLight, MeshStandardMaterial
 } from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
 import ChristmasPenguin from "./christmasPenguin"
@@ -13,9 +13,10 @@ import Snow from "./snow"
 import { getRapier } from "./rapier"
 import RAPIER from "@dimforge/rapier3d-compat"
 import GiftBox from "./giftBox"
-import { RANDOM_SPHERE_COORDINATES, RAPIER_SCALING_COEFFICIENT } from "./constants"
+import { RANDOM_SKY_COORDINATES, RANDOM_SPHERE_COORDINATES, RAPIER_SCALING_COEFFICIENT } from "./constants"
 import ImageGallery from "./gallery"
-import PhysicsEnabledObject from "./christmasTree"
+import PhysicsEnabledObject from "./physicsEnabledObject"
+import ChristmasLight from "./christmasLight"
 
 // TODO: Adjust camera scrolling
 // TODO: Enable snowball throwing
@@ -36,9 +37,13 @@ import PhysicsEnabledObject from "./christmasTree"
     const debugObject = {
         envMapIntensity: 5,
         penguinSpeed: 5,
-        zoom: 1.05,
-        debugPhysics: false
+        zoom: 2,
+        debugPhysics: false,
+        radius: 1,
+        phi: 0.05
     }
+    gui.add(debugObject, "radius", 0, 10)
+    gui.add(debugObject, "phi", 0, 3)
     gui.add(debugObject, "penguinSpeed", 0, 10)
     gui.add(debugObject, "zoom", 1, 3)
  
@@ -126,6 +131,7 @@ import PhysicsEnabledObject from "./christmasTree"
     worldMaterial.normalScale.set(2, 2)
     const worldMesh = new Mesh(worldGeometry, worldMaterial)
     worldMesh.rotation.x = - Math.PI * 0.5
+    worldMesh.receiveShadow = true
     scene.add(worldMesh)
  
     /**
@@ -159,10 +165,8 @@ import PhysicsEnabledObject from "./christmasTree"
     const giftModel: Group = await new Promise((resolve, reject) => {
         gltfLoader.load("/models/gift_box.gltf", (obj) => {
             obj.scene.traverse( function( node ) {
-                if ( node instanceof Mesh ) { 
-                    node.castShadow = true 
-                    node.translateY(-1.4)
-                }
+                node.castShadow = true 
+                node.translateY(-1.4)
             })
             resolve(obj.scene)
         })
@@ -182,35 +186,35 @@ import PhysicsEnabledObject from "./christmasTree"
     const imageGalleries: ImageGallery[] = []
     const giftBoxes: GiftBox[] = [
         // Lensa Pack 1
-        createGiftBox(4, (position: Vector3) => {
+        createGiftBox(5, (position: Vector3) => {
             imageGalleries.push(
                 new ImageGallery(position, scene, textureLoader, "lensa_pack_1", 100, "JPG")
             )
         }),
 
         // Lensa Pack 2
-        createGiftBox(3, (position: Vector3) => {
+        createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
                 new ImageGallery(position, scene, textureLoader, "lensa_pack_2", 200, "JPG")
             )
         }),
 
         // Santa Penguin
-        createGiftBox(5, (position: Vector3) => {
+        createGiftBox(6, (position: Vector3) => {
             imageGalleries.push(
                 new ImageGallery(position, scene, textureLoader, "santa_penguin", 32, "png")
             )
         }),
 
         // Jess Universal
-        createGiftBox(3, (position: Vector3) => {
+        createGiftBox(5, (position: Vector3) => {
             imageGalleries.push(
                 new ImageGallery(position, scene, textureLoader, "jess_universal", 32, "png")
             )
         }),
 
         // Swing Private
-        createGiftBox(2, (position: Vector3) => {
+        createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
                 new ImageGallery(position, scene, textureLoader, "dance_private", 1, "png")
             )
@@ -237,6 +241,9 @@ import PhysicsEnabledObject from "./christmasTree"
     */
     const christmasPenguinModel: Group = await new Promise((resolve, reject) => {
         gltfLoader.load("/models/christmas_penguin_glTF.glb", (gltf) => {
+            gltf.scene.traverse( function( node ) {
+                node.castShadow = true
+            })
             gltf.scene.scale.set(2.5, 2.5, 2.5)
             gltf.scene.children[0].rotateX(-Math.PI/2)
             gltf.scene.children[0].rotateY(-Math.PI/2)
@@ -436,7 +443,7 @@ import PhysicsEnabledObject from "./christmasTree"
     /**
     * Lights
     */
-    const directionalLight = new DirectionalLight("#ffffff", 1)
+    const directionalLight = new DirectionalLight("#ffffff", 0.5)
     directionalLight.castShadow = true
     directionalLight.shadow.camera.far = 30
     directionalLight.shadow.mapSize.set(1024, 1024)
@@ -444,8 +451,44 @@ import PhysicsEnabledObject from "./christmasTree"
     directionalLight.position.set(3.5, 2, - 1.25)
     scene.add(directionalLight)
 
-    const ambientLight = new AmbientLight("#ffffff", 0.3)
+    const ambientLight = new AmbientLight("#ffffff", 0.1)
     scene.add(ambientLight)
+
+    const christmasLights: ChristmasLight[] = []
+    const bulbGeometry = new SphereGeometry( 0.02, 16, 8 )
+    const bulbMat = new MeshStandardMaterial( {
+        emissive: 0xf8edd4,
+        emissiveIntensity: 10,
+        color: 0x000000
+    })
+    const makeChristmasLight = (color: number) => {
+        const bulbLight = new PointLight( color, 10, 100, 1 )
+        bulbLight.add( new Mesh( bulbGeometry, bulbMat ) )
+        bulbLight.position.set(10, worldRadius + 10, 5)
+        bulbLight.castShadow = true
+
+        const newLight = new ChristmasLight(bulbLight, scene, world)
+        return newLight
+    }
+    
+    const numChristmasLights = 12
+    let colorIndex = 0
+    const colors = [0xff0000, 0x00ff00, 0xFDF4DC]
+    for (let i = 0; i < numChristmasLights; i++) {
+        if (colorIndex < colors.length - 1) {
+            colorIndex++
+        } else {
+            colorIndex = 0
+        }
+        christmasLights.push(makeChristmasLight(colors[colorIndex]).setPosition(RANDOM_SKY_COORDINATES[i]))
+    }
+    christmasLights.forEach(ele => {
+        gameElements[ele.collider.handle] = ele
+    })
+    setInterval(() => {
+        christmasLights[Math.floor(Math.random() * christmasLights.length)].body
+            .applyImpulse(new RAPIER.Vector3(Math.random() * 100, Math.random() * 100, Math.random() * 100), true)
+    }, 1000)
  
     gui.add(directionalLight, "intensity").min(0).max(10).step(0.001).name("lightIntensity")
     gui.add(directionalLight.position, "x").min(- 5).max(5).step(0.001).name("lightX")
@@ -572,8 +615,8 @@ import PhysicsEnabledObject from "./christmasTree"
         /** Move the camera relative to the penguin */
         const spherical = new Spherical()
         spherical.setFromVector3(object.position)
-        spherical.radius += 1
-        spherical.phi += 0.05
+        spherical.radius += debugObject.radius
+        spherical.phi += debugObject.phi
         camera.position.setFromSpherical(spherical)
         camera.position.multiplyScalar(debugObject.zoom)
         camera.lookAt(object.position)

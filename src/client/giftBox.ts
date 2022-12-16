@@ -1,4 +1,4 @@
-import { Group, Quaternion, Scene, Vector3 } from "three"
+import { Group, Matrix4, Quaternion, Scene, Vector3 } from "three"
 import RAPIER from "@dimforge/rapier3d-compat"
 import { RAPIER_SCALING_COEFFICIENT } from "./constants"
 /**
@@ -40,8 +40,9 @@ class GiftBox {
         const adjPosition = position.divideScalar(RAPIER_SCALING_COEFFICIENT)
         this.body.setTranslation(new RAPIER.Vector3(adjPosition.x, adjPosition.y, adjPosition.z), true)
 
-        const rotation = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 0), position)
-        this.body.setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w }, true)
+        const rotation = new Quaternion().setFromRotationMatrix(
+            new Matrix4().lookAt(adjPosition, new Vector3(0, 0, 0), new Vector3(0, 1, 0)))
+        this.body.setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w }, false)
     }
 
     openPresent() {
