@@ -235,6 +235,22 @@ import ChristmasLight from "./christmasLight"
         ))
     })
 
+    const adjustGiftBoxFraction = () => {
+        const fractionContainer = document.getElementById("gifts-fraction-container")
+        const giftsOpened = giftBoxes.reduce((acc, curr) => {
+            if (curr.opened) {
+                return acc + 1
+            } else {
+                return acc
+            }
+        }, 0)
+        fractionContainer!.innerHTML = `
+            <div class="gifts-fraction">
+                <sup>${giftsOpened}</sup>&frasl;<sub>${giftBoxes.length}</sub>
+            </div>
+        `
+    }
+    adjustGiftBoxFraction()
 
     /**
     * Penguin
@@ -451,7 +467,7 @@ import ChristmasLight from "./christmasLight"
     directionalLight.position.set(3.5, 2, - 1.25)
     scene.add(directionalLight)
 
-    const ambientLight = new AmbientLight("#ffffff", 0.1)
+    const ambientLight = new AmbientLight("#ffffff", 0.4)
     scene.add(ambientLight)
 
     const christmasLights: ChristmasLight[] = []
@@ -564,11 +580,14 @@ import ChristmasLight from "./christmasLight"
         // Step the physics world
         world.step(eventQueue)
 
+        // Detect collision events
         eventQueue.drainCollisionEvents((handle1, handle2, started) => {
             const maybeGiftBox = gameElements[handle1]
-            if (maybeGiftBox instanceof GiftBox) {
+            if (maybeGiftBox instanceof GiftBox && !maybeGiftBox.opened) {
                 maybeGiftBox.openPresent()
+                adjustGiftBoxFraction()
             }
+            
         })
   
         // Position the game elements
