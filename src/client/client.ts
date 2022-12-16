@@ -207,6 +207,20 @@ import PhysicsEnabledObject from "./christmasTree"
             imageGalleries.push(
                 new ImageGallery(position, scene, textureLoader, "jess_universal", 32, "png")
             )
+        }),
+
+        // Swing Private
+        createGiftBox(2, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery(position, scene, textureLoader, "dance_private", 1, "png")
+            )
+        }),
+
+        // Swing Public
+        createGiftBox(4, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery(position, scene, textureLoader, "dance_series", 1, "png")
+            )
         })
     ]
     giftBoxes.forEach((giftBox, index) => {
@@ -295,7 +309,7 @@ import PhysicsEnabledObject from "./christmasTree"
         if (jump && jumpCount < 2) {
             jumpCount++
             const jumpVector = new Vector3().subVectors(
-                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 100)
+                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 90)
             const jumpCannonVector = new RAPIER.Vector3(jumpVector.x, jumpVector.y, jumpVector.z)
             body.applyImpulse(jumpCannonVector, true)
             jump = false
