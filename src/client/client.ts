@@ -4,17 +4,18 @@ import {
     TextureLoader, Scene, Mesh, sRGBEncoding, SphereGeometry, 
     DirectionalLight, PerspectiveCamera, WebGLRenderer, PCFSoftShadowMap, 
     Clock, MeshPhysicalMaterial, BufferAttribute, AmbientLight, Vector3, 
-    ArrowHelper, Object3D, Group, Quaternion, BoxGeometry, Box3, MeshBasicMaterial
+    ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, Vector2, Raycaster
 } from "three"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader"
-import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader"
 import ChristmasPenguin from "./christmasPenguin"
 import { SnowBall, throwSnowBall } from "./snowBall"
 import Snow from "./snow"
 import { getRapier } from "./rapier"
 import RAPIER from "@dimforge/rapier3d-compat"
-import GiftBox from "./gift_box"
+import GiftBox from "./giftBox"
+import { RANDOM_SPHERE_COORDINATES, RAPIER_SCALING_COEFFICIENT } from "./constants"
+import ImageGallery from "./gallery"
+import PhysicsEnabledObject from "./christmasTree"
 
 // TODO: Adjust camera scrolling
 // TODO: Enable snowball throwing
@@ -34,14 +35,14 @@ import GiftBox from "./gift_box"
     const gui = new GUI()
     const debugObject = {
         envMapIntensity: 5,
-        penguinSpeed: 15,
-        zoom: 0.7,
+        penguinSpeed: 5,
+        zoom: 1.05,
         debugPhysics: false
     }
-    gui.add(debugObject, "penguinSpeed", 10, 30)
-    gui.add(debugObject, "zoom", 0, 5)
+    gui.add(debugObject, "penguinSpeed", 0, 10)
+    gui.add(debugObject, "zoom", 1, 3)
  
-    // Canvas
+    // Canvaswa
     const canvas = document.querySelector("canvas.webgl") as HTMLElement
  
     // Scene
@@ -68,8 +69,16 @@ import GiftBox from "./gift_box"
     /**
      * Game Elements
      */
-    type GameElement = { body: RAPIER.RigidBody, object: Object3D, shouldRotate: boolean }
-    const gameElements: GameElement[] = []
+    type GameElements = { [colliderHandle: number]: GameElement }
+    type GameElement = { 
+        collider: RAPIER.Collider, 
+        body: RAPIER.RigidBody, 
+        object: Object3D, 
+        shouldRotate: boolean
+        scene: Scene,
+        world: RAPIER.World
+    }
+    const gameElements: GameElements = {}
     
     /** 
      * Snow 
@@ -90,11 +99,11 @@ import GiftBox from "./gift_box"
     /**
     * Planet Christmas
     */
-    const worldRadius = 150
+    const worldRadius = 500
     const worldRigidBody = world.createRigidBody(
         RAPIER.RigidBodyDesc.fixed()
     )
-    world.createCollider(RAPIER.ColliderDesc.ball(worldRadius)
+    world.createCollider(RAPIER.ColliderDesc.ball(worldRadius / RAPIER_SCALING_COEFFICIENT)
         .setDensity(1)
         .setRestitution(0.4), worldRigidBody)
 
@@ -122,28 +131,31 @@ import GiftBox from "./gift_box"
     /**
      * Christmas Tree
      */
-    const treeModel: Group = await new Promise((resolve, reject) => {
+    const treeModel: Object3D = await new Promise((resolve, reject) => {
         gltfLoader.load("/models/christmas_tree.glb", (obj) => {
-            resolve(obj.scene)
+            obj.scene.children[0].traverse(child => {
+                if (child instanceof Mesh) {
+                    child.position.y -= 5
+                }
+            })
+            resolve(obj.scene.children[0])
         })
     })
-    treeModel.position.y = worldRadius
-    treeModel.scale.set(3,3,3)
-    // scene.add(treeModel)
 
-    /**
-     * Snowman
-     */
-    const snowmanModel: Group = await new Promise((resolve, reject) => {
-        gltfLoader.load("/models/snow_girl.glb", (obj) => {
-            resolve(obj.scene)
-        })
-    })
-    snowmanModel.position.y = worldRadius + 2
-    snowmanModel.scale.set(3,3,3)
-    // scene.add(snowmanModel)
+    // Create a gift box
+    const createTree = (scale: number) => {
+        const modelSize = new Box3().setFromObject(treeModel)
+        const size = modelSize.getSize(new Vector3())
+        const tree = new PhysicsEnabledObject(
+            treeModel.clone(), scene, world, size.clone().multiplyScalar(scale))
+        tree.object.scale.setScalar(scale)
+        gameElements[tree.collider.handle] = tree
+        return tree
+    }
+    const northPoleTree = createTree(1)
+    northPoleTree.setPosition(new Vector3(0, worldRadius + 2, 0))
 
-    /** Gift */
+    /** Gifts */
     const giftModel: Group = await new Promise((resolve, reject) => {
         gltfLoader.load("/models/gift_box.gltf", (obj) => {
             obj.scene.traverse( function( node ) {
@@ -155,59 +167,191 @@ import GiftBox from "./gift_box"
             resolve(obj.scene)
         })
     })
-    console.log(giftModel)
-    const modelSize = new Box3().setFromObject(giftModel)
-    const size = modelSize.getSize(new Vector3())
 
-    const createGiftBox = (scale: number) => {
-        const giftBox = new GiftBox(giftModel, worldRadius, world, size.multiplyScalar(scale))
+    // Create a gift box
+    const createGiftBox = (scale: number, present: (position: Vector3) => void) => {
+        const modelSize = new Box3().setFromObject(giftModel)
+        const size = modelSize.getSize(new Vector3())
+        const giftBox = new GiftBox(giftModel.clone(), scene, world, size.clone().multiplyScalar(scale), present)
         giftBox.object.scale.setScalar(scale)
-        gameElements.push(giftBox)
+        gameElements[giftBox.collider.handle] = giftBox
         return giftBox
     }
-    const track = createGiftBox(1)
+
+    // Image Gallery Gifts
+    const imageGalleries: ImageGallery[] = []
+    const giftBoxes: GiftBox[] = [
+        // Lensa Pack 1
+        createGiftBox(4, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery(position, scene, textureLoader, "lensa_pack_1", 100, "JPG")
+            )
+        }),
+
+        // Lensa Pack 2
+        createGiftBox(3, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery(position, scene, textureLoader, "lensa_pack_2", 200, "JPG")
+            )
+        }),
+
+        // Santa Penguin
+        createGiftBox(5, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery(position, scene, textureLoader, "santa_penguin", 32, "png")
+            )
+        }),
+
+        // Jess Universal
+        createGiftBox(3, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery(position, scene, textureLoader, "jess_universal", 32, "png")
+            )
+        })
+    ]
+    giftBoxes.forEach((giftBox, index) => {
+        giftBox.setPosition(new Vector3(
+            RANDOM_SPHERE_COORDINATES[index][0],
+            RANDOM_SPHERE_COORDINATES[index][1],
+            RANDOM_SPHERE_COORDINATES[index][2]
+        ))
+    })
+
 
     /**
     * Penguin
     */
     const christmasPenguinModel: Group = await new Promise((resolve, reject) => {
         gltfLoader.load("/models/christmas_penguin_glTF.glb", (gltf) => {
-            resolve(gltf.scene)
-            gltf.scene.scale.set(1.5, 1.5, 1.5)
+            gltf.scene.scale.set(2.5, 2.5, 2.5)
             gltf.scene.children[0].rotateX(-Math.PI/2)
             gltf.scene.children[0].rotateY(-Math.PI/2)
+            resolve(gltf.scene)
         })
     })
-    const christmasPenguin = new ChristmasPenguin(christmasPenguinModel, worldRadius, world)
-    gameElements.push(christmasPenguin)
+    const christmasPenguin = new ChristmasPenguin(christmasPenguinModel, scene, world)
+    christmasPenguin.setPosition(new Vector3(worldRadius + 2, 0, 0))
+    gameElements[christmasPenguin.collider.handle] = christmasPenguin
 
+    let moveForward = false
+    let moveBackward = false
+    let moveLeft = false
+    let moveRight = false
+    let jump = true
     window.addEventListener("keydown", function(event) {
         if (event.shiftKey) {
-            console.log(christmasPenguin.object.rotation.z)
             // Create and add a snowball
             const snowBallPosition = christmasPenguin.object.position.clone()
             snowBallPosition.y += 5
-            const snowBall = new SnowBall(world, snowBallPosition)
+            const snowBall = new SnowBall(scene, world)
+            snowBall.setPosition(snowBallPosition)
+            gameElements[snowBall.collider.handle] = snowBall
             scene.add(snowBall.object)
-            gameElements.push(snowBall)
 
             // Determine the snowball direction and throw
             const snowBallDirection = new Vector3()
             christmasPenguin.object.getWorldDirection(snowBallDirection)
             visualize(new Vector3().applyQuaternion(christmasPenguin.object.quaternion), christmasPenguin.object)
-            snowBallDirection.multiplyScalar(1000)
+            snowBallDirection.multiplyScalar(100)
             throwSnowBall(snowBall, new RAPIER.Vector3(snowBallDirection.x, snowBallDirection.y, snowBallDirection.z))
 
             // Cleanup after two seconds
             setTimeout(() => {
-                scene.remove(snowBall.object)
-                world.removeCollider(snowBall.collider, false)
-                world.removeRigidBody(snowBall.body)
-                gameElements.splice(gameElements.indexOf(snowBall), 1)
+                snowBall.removeSelfFromGame()
             }, 2000)
         }
-        applyForce(event.key, christmasPenguin.object, christmasPenguin.body)
+
+        const inputKey = event.key
+        if (inputKey === "ArrowUp" || inputKey === "w") {
+            moveForward = true
+        } else if (inputKey === "ArrowDown" || inputKey === "s") {
+            moveBackward = true
+        } else if (inputKey === "ArrowLeft" || inputKey === "a") {
+            moveLeft = true
+        } else if (inputKey === "ArrowRight" || inputKey === "d") {
+            moveRight = true
+        } else if (inputKey === " ") {
+            jump = true
+        }
     })
+
+    window.addEventListener("keyup", function(event) {
+        const inputKey = event.key
+        if (inputKey === "ArrowUp" || inputKey === "w") {
+            moveForward = false
+        } else if (inputKey === "ArrowDown" || inputKey === "s") {
+            moveBackward = false
+        } else if (inputKey === "ArrowLeft" || inputKey === "a") {
+            moveLeft = false
+        } else if (inputKey === "ArrowRight" || inputKey === "d") {
+            moveRight = false
+        }
+    })
+
+    let jumpCount = 0
+    const applyForce = (object: Object3D, body: RAPIER.RigidBody) => {
+        // Calculate the new velocity based on the direction
+        const direction = new Vector3()
+        if (jump && jumpCount < 2) {
+            jumpCount++
+            const jumpVector = new Vector3().subVectors(
+                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 100)
+            const jumpCannonVector = new RAPIER.Vector3(jumpVector.x, jumpVector.y, jumpVector.z)
+            body.applyImpulse(jumpCannonVector, true)
+            jump = false
+            setTimeout(() => {
+                jumpCount--
+            }, 1000)
+        } 
+        
+        if (moveForward) {
+            direction.subVectors(
+                object.position, 
+                camera.position.clone().divideScalar(debugObject.zoom)
+            ).normalize()
+
+            // Update the object's velocity
+            direction.multiplyScalar(debugObject.penguinSpeed)
+            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
+        } 
+        
+        if (moveBackward) {
+            direction.subVectors(
+                camera.position.clone().divideScalar(debugObject.zoom), 
+                object.position
+            ).normalize()
+
+            // Update the object's velocity
+            direction.multiplyScalar(debugObject.penguinSpeed)
+            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
+        }
+        
+        if (moveLeft) {
+            direction.subVectors(
+                object.position, 
+                camera.position.clone().divideScalar(debugObject.zoom)
+            ).normalize()
+            const axis = new Vector3(0, 1, 0).projectOnPlane(direction)
+            direction.applyAxisAngle(axis, Math.PI / 2)
+
+            // Update the object's velocity
+            direction.multiplyScalar(debugObject.penguinSpeed)
+            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
+        }
+        
+        if (moveRight) {
+            direction.subVectors(
+                object.position, 
+                camera.position.clone().divideScalar(debugObject.zoom)
+            ).normalize()
+            const axis = new Vector3(0, 1, 0).projectOnPlane(direction)
+            direction.applyAxisAngle(axis, -Math.PI / 2)
+
+            // Update the object's velocity
+            direction.multiplyScalar(debugObject.penguinSpeed)
+            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
+        }
+    }
         
 
     window.addEventListener("wheel", (e) =>
@@ -223,63 +367,57 @@ import GiftBox from "./gift_box"
         }
     })
 
+    /**
+    * Mouse Input and Raycasting
+    */
     let prevX: number | null = 0
+    const mouse = new Vector2()
+    const raycaster = new Raycaster()
     window.addEventListener("mousemove", (e) => {
-        if (shouldRotate) {
-            if (prevX == null) {
-                prevX = e.clientX
-            } else if (prevX < e.clientX) {
-                christmasPenguin.object.rotateZ((e.clientX - prevX) * 0.01)
-                prevX = e.clientX
-            } else if (prevX > e.clientX) {
-                christmasPenguin.object.rotateZ((e.clientX - prevX) * 0.01)
-                prevX = e.clientX
-            }
+        mouse.x = e.clientX / sizes.width * 2 - 1
+        mouse.y = - (e.clientY / sizes.height) * 2 + 1
+        if (prevX == null) {
+            prevX = e.clientX
+        } else if (prevX < e.clientX) {
+            christmasPenguin.object.rotateZ((e.clientX - prevX) * 0.01)
+            prevX = e.clientX
+        } else if (prevX > e.clientX) {
+            christmasPenguin.object.rotateZ((e.clientX - prevX) * 0.01)
+            prevX = e.clientX
         }
-
     })
 
-    let shouldRotate = false
     window.addEventListener("mousedown", (event) => {
-        shouldRotate = true
+
+        // Raycast
+        raycaster.setFromCamera(mouse, camera) 
+
+        // Go forward buttons
+        const frames = imageGalleries.map((gallery) => gallery.frame)
+        const intersectsFrame = raycaster.intersectObjects(frames, true)
+        const intersectedFrameObjectIDs = intersectsFrame.map((intersect) => intersect.object.id)
+        const frameGallery = imageGalleries.find(imageGallery => {
+            return imageGallery.frameGroup.children.find(ele => intersectedFrameObjectIDs.includes(ele.id) )
+        })
+
+        // Go forward buttons
+        const goForwardButtons = imageGalleries.map((gallery) => gallery.goForwardButton)
+        const intersectsForward = raycaster.intersectObjects(goForwardButtons, true)
+        const intersectedForwardObjectIDs = intersectsForward.map((intersect) => intersect.object.id)
+        const goForwardTargetGallery = imageGalleries.find(imageGallery => {
+            return imageGallery.frameGroup.children.find(ele => intersectedForwardObjectIDs.includes(ele.id) )
+        })
+        goForwardTargetGallery?.navigateForward()
+
+        // Go backward buttons
+        const goBackwardButtons = imageGalleries.map((gallery) => gallery.goBackwardButton)
+        const intersectsBackward = raycaster.intersectObjects(goBackwardButtons, true)
+        const intersectedBackwardObjectIDs = intersectsBackward.map((intersect) => intersect.object.id)
+        const goBackwardTargetGallery = imageGalleries.find(imageGallery => {
+            return imageGallery.frameGroup.children.find(ele => intersectedBackwardObjectIDs.includes(ele.id) )
+        })
+        goBackwardTargetGallery?.navigateBackward()
     })
-    window.addEventListener("mouseup", () => {
-        shouldRotate = false
-        prevX = null
-    })
-
-    let jumpCount = 0
-    const applyForce = (inputKey: string, object: Object3D, body: RAPIER.RigidBody) => {
-        // Calculate the new velocity based on the direction
-        const direction = new Vector3()
-        if (inputKey === " " && jumpCount < 2) {
-            jumpCount++
-            const jumpVector = new Vector3().subVectors(
-                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 30)
-            const jumpCannonVector = new RAPIER.Vector3(jumpVector.x, jumpVector.y, jumpVector.z)
-            body.applyImpulse(jumpCannonVector, true)
-            setTimeout(() => {
-                jumpCount--
-            }, 1000)
-        } else if (inputKey === "ArrowUp" || inputKey === "w") {
-            direction.subVectors(object.position, camera.position).normalize()
-        } else if (inputKey === "ArrowDown" || inputKey === "s") {
-            direction.subVectors(camera.position, object.position).normalize()
-        } else if (inputKey === "ArrowLeft" || inputKey === "a") {
-            direction.subVectors(object.position, camera.position).normalize()
-            const axis = new Vector3(0, 1, 0).projectOnPlane(direction)
-            direction.applyAxisAngle(axis, Math.PI / 2)
-        } else if (inputKey === "ArrowRight" || inputKey === "d") {
-            direction.subVectors(object.position, camera.position).normalize()
-            const axis = new Vector3(0, 1, 0).projectOnPlane(direction)
-            direction.applyAxisAngle(axis, -Math.PI / 2)
-        }
-
-        // Update the object's velocity
-        direction.multiplyScalar(debugObject.penguinSpeed)
-        body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
-    }
-
 
     /**
     * Lights
@@ -327,7 +465,13 @@ import GiftBox from "./gift_box"
     * Camera
     */
     // Base camera
-    const camera = new PerspectiveCamera(35, sizes.width / sizes.height, 0.1)
+    const camera = new PerspectiveCamera(60, sizes.width / sizes.height, 0.1)
+    const newCameraPosition = new Vector3(
+        christmasPenguin.object.position.x,
+        christmasPenguin.object.position.y,
+        christmasPenguin.object.position.z
+    ).multiplyScalar(1.2)
+    camera.position.set(newCameraPosition.x, newCameraPosition.y, newCameraPosition.z + 20)
     scene.add(camera)
  
     /**
@@ -337,6 +481,7 @@ import GiftBox from "./gift_box"
         canvas: canvas,
         antialias: true
     })
+
     renderer.physicallyCorrectLights = true
     renderer.outputEncoding = sRGBEncoding
     renderer.shadowMap.enabled = true
@@ -344,31 +489,39 @@ import GiftBox from "./gift_box"
     renderer.setSize(sizes.width, sizes.height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 
-    /**
-    * Animate
-    */
-
-    new RAPIER.DebugRenderPipeline()
-    gameElements.forEach(({ object }) => {
+    // Add all game element threejs objects to the scene
+    Object.values(gameElements).forEach(({ object }) => {
         scene.add(object)
     })
 
+    /**
+     * Animate
+    */
     // Get time related variables
     const clock = new Clock()
     const waddleClockwise = true
+    const eventQueue = new RAPIER.EventQueue(true)
     let waddleClockwiseCount = 50
     const tick = () =>
     {
         // Step the physics world
-        const deltaTime = clock.getDelta()
-        world.step()
+        world.step(eventQueue)
 
+        eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+            const maybeGiftBox = gameElements[handle1]
+            if (maybeGiftBox instanceof GiftBox) {
+                maybeGiftBox.openPresent()
+            }
+        })
+  
         // Position the game elements
-        gameElements.forEach(({ object, body, shouldRotate }) => {
+        Object.values(gameElements).forEach(({ object, body, shouldRotate }) => {
 
             // Calculate the direction from the object to the origin
             const bodyPosition = body.translation()
-            object.position.copy(new Vector3(bodyPosition.x, bodyPosition.y, bodyPosition.z))
+            const newPosition = new Vector3(bodyPosition.x, bodyPosition.y, bodyPosition.z)
+            newPosition.multiplyScalar(RAPIER_SCALING_COEFFICIENT)
+            object.position.copy(newPosition)
 
             // If they should rotate, rotate them
             if (shouldRotate) {
@@ -382,8 +535,9 @@ import GiftBox from "./gift_box"
             body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
         })
 
-        // Get christmas game element properties
+        // Move the christmas penguin
         const { object } = christmasPenguin
+        applyForce(christmasPenguin.object, christmasPenguin.body)
 
         // Rotate the penguin from the center of the earth
         const preserveZRotation = object.rotation.z
@@ -400,13 +554,16 @@ import GiftBox from "./gift_box"
             christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * -0.01)
             waddleClockwiseCount++
         }
- 
-        // Update controls
-        const newCameraVector = new Vector3().subVectors(object.position, worldMesh.position)
-            .multiplyScalar(1.5).multiplyScalar(debugObject.zoom)
-        camera.position.set(newCameraVector.x, newCameraVector.y, newCameraVector.z + 30)
-        camera.lookAt(object.position.x, object.position.y, object.position.z)
 
+        /** Move the camera relative to the penguin */
+        const spherical = new Spherical()
+        spherical.setFromVector3(object.position)
+        spherical.radius += 1
+        spherical.phi += 0.05
+        camera.position.setFromSpherical(spherical)
+        camera.position.multiplyScalar(debugObject.zoom)
+        camera.lookAt(object.position)
+        
         // Snow
         const time = clock.getElapsedTime()
         snow.particleSystems.forEach((particleSystem, i) => {

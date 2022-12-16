@@ -10,7 +10,7 @@ class Snow {
     particleSystems: Points[]
 
     constructor() {
-    // Load the texture that will be used to display our snow
+        // Load the texture that will be used to display our snow
         const textureLoader = new TextureLoader()
   
         const sprite1 = textureLoader.load(
@@ -36,9 +36,9 @@ class Snow {
   
         // create the vertices and add store them in our vertices array
         for (let i = 0; i < 10000; i++) {
-            const x = Math.random() * 800 // generate random number between -1000 to 1000
-            const y = Math.random() * 800
-            const z = Math.random() * 800
+            const x = Math.random() * 4000 // generate random number between -1000 to 1000
+            const y = Math.random() * 4000
+            const z = Math.random() * 4000
             vertices.push(x, y, z)
         }
   
@@ -51,11 +51,11 @@ class Snow {
         )
   
         this.parameters = [
-            [[1.0, 0.2, 0.5], sprite2, 20],
-            [[0.95, 0.2, 0.5], sprite3, 15],
-            [[0.9, 0.2, 0.5], sprite1, 10],
-            [[0.85, 0.2, 0.5], sprite5, 8],
-            [[0.8, 0.2, 0.5], sprite4, 5],
+            [[1.0, 0.2, 0.5], sprite2, 10],
+            [[0.95, 0.2, 0.5], sprite3, 7],
+            [[0.9, 0.2, 0.5], sprite1, 5],
+            [[0.85, 0.2, 0.5], sprite5, 4],
+            [[0.8, 0.2, 0.5], sprite4, 2],
         ]
   
         this.materials = []

@@ -51,6 +51,7 @@
     "express": "^4.17.3",
     "ffmpeg": "^0.0.4",
     "file-loader": "^6.2.0",
+    "glider": "^0.1.0",
     "glslify-loader": "^2.0.0",
     "gsap": "^3.11.3",
     "html-loader": "^4.2.0",
