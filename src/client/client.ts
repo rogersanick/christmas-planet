@@ -18,6 +18,9 @@ import ImageGallery from "./gallery"
 import PhysicsEnabledObject from "./physicsEnabledObject"
 import ChristmasLight from "./christmasLight"
 
+// PRIORITIZED TODO
+// TODO: Add Jim's presents + audio
+// TODO: Fix Penguin controls
 // TODO: Adjust camera scrolling
 // TODO: Enable snowball throwing
 // TODO: Simple bad guys
@@ -37,7 +40,7 @@ import ChristmasLight from "./christmasLight"
     const debugObject = {
         envMapIntensity: 5,
         penguinSpeed: 5,
-        zoom: 2,
+        zoom: 1.05,
         debugPhysics: false,
         radius: 1,
         phi: 0.05
@@ -395,7 +398,8 @@ import ChristmasLight from "./christmasLight"
     {
         const penguinDistanceToCenterOfPlanet = christmasPenguin.object.position.distanceTo(worldMesh.position)
         const cameraDistanceToCenterOfPlanet = camera.position.distanceTo(worldMesh.position)
-        if (debugObject.zoom < 100 && penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet) {
+        if (debugObject.zoom < 100 
+            && (penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet || viewingGallery)) {
             debugObject.zoom += e.deltaY * 0.0003
             gui.updateDisplay()
         } else if (e.deltaY > 0) {
@@ -416,6 +420,7 @@ import ChristmasLight from "./christmasLight"
         if (prevX == null) {
             prevX = e.clientX
         } else if (prevX < e.clientX) {
+            console.log(mouse.x)
             christmasPenguin.object.rotateZ((e.clientX - prevX) * 0.01)
             prevX = e.clientX
         } else if (prevX > e.clientX) {
@@ -424,18 +429,10 @@ import ChristmasLight from "./christmasLight"
         }
     })
 
-    window.addEventListener("mousedown", (event) => {
+    window.addEventListener("mousedown", () => {
 
-        // Raycast
-        raycaster.setFromCamera(mouse, camera) 
-
-        // Go forward buttons
-        const frames = imageGalleries.map((gallery) => gallery.frame)
-        const intersectsFrame = raycaster.intersectObjects(frames, true)
-        const intersectedFrameObjectIDs = intersectsFrame.map((intersect) => intersect.object.id)
-        const frameGallery = imageGalleries.find(imageGallery => {
-            return imageGallery.frameGroup.children.find(ele => intersectedFrameObjectIDs.includes(ele.id) )
-        })
+        // Click Raycaster
+        raycaster.setFromCamera(mouse, camera)
 
         // Go forward buttons
         const goForwardButtons = imageGalleries.map((gallery) => gallery.goForwardButton)
@@ -444,8 +441,12 @@ import ChristmasLight from "./christmasLight"
         const goForwardTargetGallery = imageGalleries.find(imageGallery => {
             return imageGallery.frameGroup.children.find(ele => intersectedForwardObjectIDs.includes(ele.id) )
         })
-        goForwardTargetGallery?.navigateForward()
 
+        if (goForwardTargetGallery) {
+            goForwardTargetGallery.navigateForward()
+            return
+        }
+        
         // Go backward buttons
         const goBackwardButtons = imageGalleries.map((gallery) => gallery.goBackwardButton)
         const intersectsBackward = raycaster.intersectObjects(goBackwardButtons, true)
@@ -453,7 +454,24 @@ import ChristmasLight from "./christmasLight"
         const goBackwardTargetGallery = imageGalleries.find(imageGallery => {
             return imageGallery.frameGroup.children.find(ele => intersectedBackwardObjectIDs.includes(ele.id) )
         })
-        goBackwardTargetGallery?.navigateBackward()
+
+        if (goBackwardTargetGallery) {
+            goBackwardTargetGallery.navigateBackward()
+            return
+        }
+        
+        // Frames themselves
+        const frames = imageGalleries.map((gallery) => gallery.frame)
+        const intersectsFrame = raycaster.intersectObjects(frames, true)
+        const intersectedFrameObjectIDs = intersectsFrame.map((intersect) => intersect.object.id)
+        const frameGallery = imageGalleries.find(imageGallery => {
+            return imageGallery.frameGroup.children.find(ele => intersectedFrameObjectIDs.includes(ele.id) )
+        })
+        if (currExitViewingMode) {
+            currExitViewingMode()
+        } else if (frameGallery) {
+            enterViewingMode(frameGallery.frameGroup)
+        }
     })
 
     /**
@@ -478,7 +496,7 @@ import ChristmasLight from "./christmasLight"
         color: 0x000000
     })
     const makeChristmasLight = (color: number) => {
-        const bulbLight = new PointLight( color, 10, 100, 1 )
+        const bulbLight = new PointLight( color, 50, 100, 1 )
         bulbLight.add( new Mesh( bulbGeometry, bulbMat ) )
         bulbLight.position.set(10, worldRadius + 10, 5)
         bulbLight.castShadow = true
@@ -538,7 +556,7 @@ import ChristmasLight from "./christmasLight"
     * Camera
     */
     // Base camera
-    const camera = new PerspectiveCamera(60, sizes.width / sizes.height, 0.1)
+    const camera = new PerspectiveCamera(50, sizes.width / sizes.height, 0.1)
     const newCameraPosition = new Vector3(
         christmasPenguin.object.position.x,
         christmasPenguin.object.position.y,
@@ -567,79 +585,143 @@ import ChristmasLight from "./christmasLight"
         scene.add(object)
     })
 
+    /** 
+     * Enter viewing mode
+     */
+    let currExitViewingMode: (() => void) | undefined
+    const enterViewingMode = (object: Object3D) => {
+        mainGamePlaying = false
+        viewingGallery = true
+        targetObject = object
+        const oldPosition = object.position.clone()
+        const oldRotation = object.quaternion.clone()
+        const oldZoom = debugObject.zoom
+        debugObject.zoom = 2
+        currExitViewingMode = () => {
+            exitViewingMode(object, oldPosition, oldRotation, oldZoom)
+        }
+    }
+
+    /** 
+     * Exit Viewing Mode 
+     */
+    const exitViewingMode = (
+        object: Object3D, 
+        targetObjectOriginalPosition: Vector3, 
+        targetObjectOriginalRotation: Quaternion,
+        oldZoom: number
+    ) => {
+        mainGamePlaying = true
+        viewingGallery = false
+        const { x, y, z} = targetObjectOriginalPosition
+        object.position.set(x, y, z)
+        object.rotation.setFromQuaternion(targetObjectOriginalRotation)
+        targetObject = undefined
+        currExitViewingMode = undefined
+        debugObject.zoom = oldZoom
+    }
+
     /**
      * Animate
     */
+
     // Get time related variables
     const clock = new Clock()
     const waddleClockwise = true
+
+    // Physics, collision detection and processing queue
     const eventQueue = new RAPIER.EventQueue(true)
+
+    // Game mode constants
+    let mainGamePlaying = true
     let waddleClockwiseCount = 50
+    let viewingGallery = false
+
+    // Viewing Target
+    let targetObject: Object3D | undefined
+    
     const tick = () =>
     {
         // Step the physics world
         world.step(eventQueue)
 
-        // Detect collision events
-        eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-            const maybeGiftBox = gameElements[handle1]
-            if (maybeGiftBox instanceof GiftBox && !maybeGiftBox.opened) {
-                maybeGiftBox.openPresent()
-                adjustGiftBoxFraction()
+        const mainGame = () => {
+            // Detect collision events
+            eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+                const maybeGiftBox = gameElements[handle1]
+                if (maybeGiftBox instanceof GiftBox && !maybeGiftBox.opened) {
+                    maybeGiftBox.openPresent()
+                    adjustGiftBoxFraction()
+                }
+    
+            })
+
+            // Position the game elements
+            Object.values(gameElements).forEach(({ object, body, shouldRotate }) => {
+
+                // Calculate the direction from the object to the origin
+                const bodyPosition = body.translation()
+                const newPosition = new Vector3(bodyPosition.x, bodyPosition.y, bodyPosition.z)
+                newPosition.multiplyScalar(RAPIER_SCALING_COEFFICIENT)
+                object.position.copy(newPosition)
+
+                // If they should rotate, rotate them
+                if (shouldRotate) {
+                    const { x, y, z, w } = body.rotation()
+                    object.quaternion.copy(new Quaternion(x, y, z, w))
+                }
+
+                // Apply a gravitational force to the object, pulling it towards the origin
+                const direction = new Vector3().subVectors(new Vector3(0, 0, 0), object.position).normalize()
+                direction.multiplyScalar(9.81)
+                body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
+            })
+
+            // Move the christmas penguin
+            const { object } = christmasPenguin
+            applyForce(christmasPenguin.object, christmasPenguin.body)
+
+            // Rotate the penguin from the center of the earth
+            const preserveZRotation = object.rotation.z
+            object.lookAt(worldMesh.position.x, worldMesh.position.y, worldMesh.position.z)
+            object.rotation.z = preserveZRotation
+
+            // Waddle the penguin if it's moving
+            if (waddleClockwise && waddleClockwiseCount > 100) {
+                christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * 0.01)
+                waddleClockwiseCount--
+            } 
+
+            if (!waddleClockwise && waddleClockwiseCount < 100) {
+                christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * -0.01)
+                waddleClockwiseCount++
             }
-            
-        })
-  
-        // Position the game elements
-        Object.values(gameElements).forEach(({ object, body, shouldRotate }) => {
 
-            // Calculate the direction from the object to the origin
-            const bodyPosition = body.translation()
-            const newPosition = new Vector3(bodyPosition.x, bodyPosition.y, bodyPosition.z)
-            newPosition.multiplyScalar(RAPIER_SCALING_COEFFICIENT)
-            object.position.copy(newPosition)
-
-            // If they should rotate, rotate them
-            if (shouldRotate) {
-                const { x, y, z, w } = body.rotation()
-                object.quaternion.copy(new Quaternion(x, y, z, w))
-            }
-
-            // Apply a gravitational force to the object, pulling it towards the origin
-            const direction = new Vector3().subVectors(new Vector3(0, 0, 0), object.position).normalize()
-            direction.multiplyScalar(9.81)
-            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
-        })
-
-        // Move the christmas penguin
-        const { object } = christmasPenguin
-        applyForce(christmasPenguin.object, christmasPenguin.body)
-
-        // Rotate the penguin from the center of the earth
-        const preserveZRotation = object.rotation.z
-        object.lookAt(worldMesh.position.x, worldMesh.position.y, worldMesh.position.z)
-        object.rotation.z = preserveZRotation
-
-        // Waddle the penguin if it's moving
-        if (waddleClockwise && waddleClockwiseCount > 100) {
-            christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * 0.01)
-            waddleClockwiseCount--
-        } 
-        
-        if (!waddleClockwise && waddleClockwiseCount < 100) {
-            christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * -0.01)
-            waddleClockwiseCount++
+            /** Move the camera relative to the penguin */
+            const spherical = new Spherical()
+            spherical.setFromVector3(object.position)
+            spherical.radius += debugObject.radius
+            spherical.phi += debugObject.phi
+            camera.position.setFromSpherical(spherical)
+            camera.position.multiplyScalar(debugObject.zoom)
+            camera.lookAt(object.position)
         }
 
-        /** Move the camera relative to the penguin */
-        const spherical = new Spherical()
-        spherical.setFromVector3(object.position)
-        spherical.radius += debugObject.radius
-        spherical.phi += debugObject.phi
-        camera.position.setFromSpherical(spherical)
-        camera.position.multiplyScalar(debugObject.zoom)
-        camera.lookAt(object.position)
-        
+        const viewingObject = () => {
+            targetObject?.position.lerp(new Vector3(10 * debugObject.zoom,0,0), 0.01)
+            targetObject!.lookAt(camera.position)
+            targetObject?.rotateX(Math.PI/2)
+            camera.position.lerp(new Vector3(0,0,0), 0.01)
+            camera.lookAt(targetObject!.position)
+        }
+
+        // Which scenario should be rendered?
+        if (mainGamePlaying) {
+            mainGame()
+        } else if (viewingGallery) {
+            viewingObject()
+        }
+
         // Snow
         const time = clock.getElapsedTime()
         snow.particleSystems.forEach((particleSystem, i) => {

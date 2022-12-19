@@ -1,5 +1,5 @@
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, 
-    PlaneGeometry, Quaternion, Scene, SphereGeometry, TextureLoader, Vector3 } from "three"
+    PlaneGeometry, Scene, SphereGeometry, TextureLoader, Vector3 } from "three"
 
 class ImageGallery {
 
