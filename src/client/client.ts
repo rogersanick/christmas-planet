@@ -1,5 +1,6 @@
 import "./style.css"
 import { GUI } from "dat.gui"
+import Stats from "stats.js"
 import { 
     TextureLoader, Scene, Mesh, sRGBEncoding, SphereGeometry, 
     DirectionalLight, PerspectiveCamera, WebGLRenderer, PCFSoftShadowMap, 
@@ -63,6 +64,11 @@ import ChristmasLight from "./christmasLight"
     gui.add(debugObject, "phi", 0, 3)
     gui.add(debugObject, "penguinSpeed", 0, 10)
     gui.add(debugObject, "zoom", 1, 3)
+
+    /** Set up basic statistics */
+    const stats = new Stats()
+    stats.showPanel(0) // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild(stats.dom)
  
     // Canvaswa
     const canvas = document.querySelector("canvas.webgl") as HTMLElement
@@ -123,7 +129,7 @@ import ChristmasLight from "./christmasLight"
     */
     const worldRadius = 400
     const worldRigidBody = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed()
+        RAPIER.RigidBodyDesc.fixed().setCanSleep(true)
     )
     world.createCollider(RAPIER.ColliderDesc.ball(worldRadius / RAPIER_SCALING_COEFFICIENT)
         .setDensity(1)
@@ -137,7 +143,6 @@ import ChristmasLight from "./christmasLight"
     const roughnessTexture = textureLoader.load("/textures/Snow_003_ROUGH.jpg")
  
     const worldGeometry = new SphereGeometry(worldRadius, 1024)
-    worldGeometry.setAttribute("uv2", new BufferAttribute(worldGeometry.attributes.uv.array, 2))
     const worldMaterial = new MeshPhysicalMaterial({
         normalMap: normalTexture,
         aoMap: ambientOcclusionTexture,
@@ -191,11 +196,6 @@ import ChristmasLight from "./christmasLight"
             size: 50,
             height: 0.5,
             curveSegments: 12,
-            bevelEnabled: true,
-            bevelThickness: 0.04,
-            bevelSize: 0.02,
-            bevelOffset: 0,
-            bevelSegments: 5
         }
     )
     textGeometry.center()
@@ -370,7 +370,6 @@ import ChristmasLight from "./christmasLight"
     let jumpCount = 0
     const applyForce = (object: Object3D, body: RAPIER.RigidBody) => {
         // Calculate the new velocity based on the direction
-        const direction = new Vector3()
         if (jump && jumpCount < 2) {
             jumpCount++
             const jumpVector = new Vector3().subVectors(
@@ -384,6 +383,7 @@ import ChristmasLight from "./christmasLight"
         } 
         
         if (moveForward) {
+            const direction = new Vector3()
             direction.subVectors(
                 object.position, 
                 camera.position.clone().divideScalar(debugObject.zoom)
@@ -395,6 +395,7 @@ import ChristmasLight from "./christmasLight"
         } 
         
         if (moveBackward) {
+            const direction = new Vector3()
             direction.subVectors(
                 camera.position.clone().divideScalar(debugObject.zoom), 
                 object.position
@@ -406,6 +407,7 @@ import ChristmasLight from "./christmasLight"
         }
         
         if (moveLeft) {
+            const direction = new Vector3()
             direction.subVectors(
                 object.position, 
                 camera.position.clone().divideScalar(debugObject.zoom)
@@ -419,6 +421,7 @@ import ChristmasLight from "./christmasLight"
         }
         
         if (moveRight) {
+            const direction = new Vector3()
             direction.subVectors(
                 object.position, 
                 camera.position.clone().divideScalar(debugObject.zoom)
@@ -438,7 +441,7 @@ import ChristmasLight from "./christmasLight"
         const penguinDistanceToCenterOfPlanet = christmasPenguin.object.position.distanceTo(worldMesh.position)
         const cameraDistanceToCenterOfPlanet = camera.position.distanceTo(worldMesh.position)
         if (debugObject.zoom < 100 
-            && (penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet || viewingGallery)) {
+            && (penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet || gameFunction === viewingObject)) {
             debugObject.zoom += e.deltaY * 0.0003
             gui.updateDisplay()
         } else if (e.deltaY > 0) {
@@ -513,13 +516,9 @@ import ChristmasLight from "./christmasLight"
     })
 
     /**
-    * Lights
+    * Light
     */
     const directionalLight = new DirectionalLight("#ffffff", 0.5)
-    directionalLight.castShadow = true
-    directionalLight.shadow.camera.far = 30
-    directionalLight.shadow.mapSize.set(1024, 1024)
-    directionalLight.shadow.normalBias = 0.05
     directionalLight.position.set(3.5, 2, - 1.25)
     scene.add(directionalLight)
 
@@ -527,23 +526,22 @@ import ChristmasLight from "./christmasLight"
     scene.add(ambientLight)
 
     const christmasLights: ChristmasLight[] = []
-    const bulbGeometry = new SphereGeometry( 0.02, 16, 8 )
+    const bulbGeometry = new SphereGeometry( 0.02, 8, 8 )
     const bulbMat = new MeshStandardMaterial( {
         emissive: 0xf8edd4,
         emissiveIntensity: 10,
         color: 0x000000
     })
     const makeChristmasLight = (color: number) => {
-        const bulbLight = new PointLight( color, 50, 100, 1 )
+        const bulbLight = new PointLight( color, 50, 100, 0.6 )
         bulbLight.add( new Mesh( bulbGeometry, bulbMat ) )
         bulbLight.position.set(10, worldRadius + 10, 5)
         bulbLight.castShadow = true
-
         const newLight = new ChristmasLight(bulbLight, scene, world)
         return newLight
     }
     
-    const numChristmasLights = 12
+    const numChristmasLights = 6
     let colorIndex = 0
     const colors = [0xff0000, 0x00ff00, 0xFDF4DC]
     for (let i = 0; i < numChristmasLights; i++) {
@@ -560,7 +558,7 @@ import ChristmasLight from "./christmasLight"
     setInterval(() => {
         christmasLights[Math.floor(Math.random() * christmasLights.length)].body
             .applyImpulse(new RAPIER.Vector3(Math.random() * 100, Math.random() * 100, Math.random() * 100), true)
-    }, 1000)
+    }, 2000)
  
     gui.add(directionalLight, "intensity").min(0).max(10).step(0.001).name("lightIntensity")
     gui.add(directionalLight.position, "x").min(- 5).max(5).step(0.001).name("lightX")
@@ -610,7 +608,6 @@ import ChristmasLight from "./christmasLight"
     */
     const renderer = new WebGLRenderer({
         canvas: canvas,
-        antialias: true
     })
 
     renderer.physicallyCorrectLights = true
@@ -630,8 +627,7 @@ import ChristmasLight from "./christmasLight"
      */
     let currExitViewingMode: (() => void) | undefined
     const enterViewingMode = (object: Object3D) => {
-        mainGamePlaying = false
-        viewingGallery = true
+        gameFunction = viewingObject
         targetObject = object
         const oldPosition = object.position.clone()
         const oldRotation = object.quaternion.clone()
@@ -651,14 +647,13 @@ import ChristmasLight from "./christmasLight"
         targetObjectOriginalRotation: Quaternion,
         oldZoom: number
     ) => {
-        mainGamePlaying = true
-        viewingGallery = false
         const { x, y, z} = targetObjectOriginalPosition
         object.position.set(x, y, z)
         object.rotation.setFromQuaternion(targetObjectOriginalRotation)
         targetObject = undefined
         currExitViewingMode = undefined
         debugObject.zoom = oldZoom
+        gameFunction = mainGame
     }
 
     /**
@@ -673,97 +668,96 @@ import ChristmasLight from "./christmasLight"
     const eventQueue = new RAPIER.EventQueue(true)
 
     // Game mode constants
-    let mainGamePlaying = true
-    let waddleClockwiseCount = 50
-    let viewingGallery = false
+    let gameFunction: () => void = () => console.log("Not Set!")
 
     // Viewing Target
     let targetObject: Object3D | undefined
-    
-    const tick = () =>
-    {
-        // Step the physics world
-        world.step(eventQueue)
 
-        const mainGame = () => {
-            // Detect collision events
-            eventQueue.drainCollisionEvents((handle1, handle2, started) => {
-                const maybeGiftBox = gameElements[handle1]
-                if (maybeGiftBox instanceof GiftBox && !maybeGiftBox.opened) {
-                    maybeGiftBox.openPresent()
-                    adjustGiftBoxFraction()
-                }
-    
-            })
+    // Main game definition
+    const spherical = new Spherical()
+    const mainGame = () => {
+        // Detect collision events
+        eventQueue.drainCollisionEvents((handle1, handle2, started) => {
+            const maybeGiftBox = gameElements[handle1]
+            if (maybeGiftBox && maybeGiftBox instanceof GiftBox && !maybeGiftBox.opened) {
+                maybeGiftBox.openPresent()
+                adjustGiftBoxFraction()
+            }
+        })
 
-            // Position the game elements
-            Object.values(gameElements).forEach(({ object, body, shouldRotate }) => {
-
-                // Calculate the direction from the object to the origin
+        // Position the game elements
+        for (const key in gameElements) {
+            const { object, body, shouldRotate } = gameElements[key]
+            
+            // Calculate the direction from the object to the origin
+            if (!body.isSleeping()) {
                 const bodyPosition = body.translation()
-                const newPosition = new Vector3(bodyPosition.x, bodyPosition.y, bodyPosition.z)
-                newPosition.multiplyScalar(RAPIER_SCALING_COEFFICIENT)
-                object.position.copy(newPosition)
-
+                object.position.set(
+                    bodyPosition.x * RAPIER_SCALING_COEFFICIENT,
+                    bodyPosition.y * RAPIER_SCALING_COEFFICIENT,
+                    bodyPosition.z * RAPIER_SCALING_COEFFICIENT
+                )
+     
                 // If they should rotate, rotate them
                 if (shouldRotate) {
                     const { x, y, z, w } = body.rotation()
-                    object.quaternion.copy(new Quaternion(x, y, z, w))
+                    object.quaternion.x = x
+                    object.quaternion.y = y
+                    object.quaternion.z = z
+                    object.quaternion.w = w
                 }
-
-                // Apply a gravitational force to the object, pulling it towards the origin
-                const direction = new Vector3().subVectors(new Vector3(0, 0, 0), object.position).normalize()
-                direction.multiplyScalar(9.81)
-                body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
-            })
-
-            // Move the christmas penguin
-            const { object } = christmasPenguin
-            applyForce(christmasPenguin.object, christmasPenguin.body)
-
-            // Rotate the penguin from the center of the earth
-            const preserveZRotation = object.rotation.z
-            object.lookAt(worldMesh.position.x, worldMesh.position.y, worldMesh.position.z)
-            object.rotation.z = preserveZRotation
-
-            // Waddle the penguin if it's moving
-            if (waddleClockwise && waddleClockwiseCount > 100) {
-                christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * 0.01)
-                waddleClockwiseCount--
-            } 
-
-            if (!waddleClockwise && waddleClockwiseCount < 100) {
-                christmasPenguin.object.children[0].rotateX(clock.getElapsedTime() * -0.01)
-                waddleClockwiseCount++
             }
+ 
+            // Apply a gravitational force to the object, pulling it towards the origin
+            const direction = new Vector3(0, 0, 0).sub(object.position).normalize()
+            direction.multiplyScalar(9.81)
+            body.applyImpulse(new RAPIER.Vector3(direction.x, direction.y, direction.z), true)
+        }        
 
-            /** Move the camera relative to the penguin */
-            const spherical = new Spherical()
-            spherical.setFromVector3(object.position)
-            spherical.radius += debugObject.radius
-            spherical.phi += debugObject.phi
-            camera.position.setFromSpherical(spherical)
-            camera.position.multiplyScalar(debugObject.zoom)
-            camera.lookAt(object.position)
-        }
+        // Move the christmas penguin
+        const { object } = christmasPenguin
+        applyForce(christmasPenguin.object, christmasPenguin.body)
 
-        const viewingObject = () => {
-            targetObject?.position.lerp(new Vector3(10 * debugObject.zoom,0,0), 0.01)
-            targetObject!.lookAt(camera.position)
-            targetObject?.rotateX(Math.PI/2)
-            camera.position.lerp(new Vector3(0,0,0), 0.01)
-            camera.lookAt(targetObject!.position)
-        }
+        // Rotate the penguin from the center of the earth
+        const preserveZRotation = object.rotation.z
+        object.lookAt(worldMesh.position.x, worldMesh.position.y, worldMesh.position.z)
+        object.rotation.z = preserveZRotation
 
-        // Which scenario should be rendered?
-        if (mainGamePlaying) {
-            mainGame()
-        } else if (viewingGallery) {
-            viewingObject()
-        }
+        // Waddle the penguin if it's moving
+        // TODO: Implement a better waddle
+
+        /** Move the camera relative to the penguin */
+        spherical.setFromVector3(object.position)
+        spherical.radius += debugObject.radius
+        spherical.phi += debugObject.phi
+        camera.position.setFromSpherical(spherical)
+        camera.position.multiplyScalar(debugObject.zoom)
+        camera.lookAt(object.position)
+    }
+
+    // Viewing mode definition
+    const viewingObject = () => {
+        targetObject?.position.lerp(new Vector3(10 * debugObject.zoom,0,0), 0.01)
+        targetObject!.lookAt(camera.position)
+        targetObject?.rotateX(Math.PI/2)
+        camera.position.lerp(new Vector3(0,0,0), 0.01)
+        camera.lookAt(targetObject!.position)
+    }
+
+    gameFunction = mainGame
+    
+    const tick = () =>
+    {
+        stats.begin()
+        const time = clock.getElapsedTime()
+
+        // Step the physics world
+        world.step(eventQueue)
+
+        // Apply the current game logic
+        gameFunction()
 
         // Snow
-        const time = clock.getElapsedTime()
         snow.particleSystems.forEach((particleSystem, i) => {
             particleSystem.rotation.y = time * (i < 4 ? i + 1 : -(i + 1)) * 0.05
         })
@@ -778,6 +772,8 @@ import ChristmasLight from "./christmasLight"
         renderer.render(scene, camera)        
  
         // Call tick again on the next frame
+        stats.end()
+        console.log("Number of Triangles :", renderer.info.render.triangles)
         window.requestAnimationFrame(tick)
     }
  

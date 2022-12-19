@@ -21,7 +21,7 @@ class ChristmasPenguin {
         this.body = world.createRigidBody(
             RAPIER.RigidBodyDesc.dynamic().setAdditionalMass(10)
                 .setLinearDamping(1)
-                .setCcdEnabled(true).setCanSleep(false)
+                .setCanSleep(false)
                 .setGravityScale(0.0)
         )
         

@@ -19,12 +19,13 @@ class ChristmasLight {
         this.object = object
         this.body = world.createRigidBody(
             RAPIER.RigidBodyDesc.dynamic()
-                .setCcdEnabled(true)
+                .setLinearDamping(0.2)
+                .setCanSleep(true)
                 .setGravityScale(0.0)
         )
     
         this.collider = world.createCollider(
-            RAPIER.ColliderDesc.ball(2).setDensity(0.05)
+            RAPIER.ColliderDesc.ball(1).setDensity(0.05)
                 .setRestitution(0.05), this.body)
         this.world = world
         this.scene = scene

@@ -22,7 +22,7 @@ class GiftBox {
         this.body = world.createRigidBody(
             RAPIER.RigidBodyDesc.dynamic().setAdditionalMass(10)
                 .setLinearDamping(1)
-                .setCcdEnabled(true)
+                .setCanSleep(true)
                 .setGravityScale(0.0)
         )
       

@@ -20,7 +20,6 @@ class PhysicsEnabledObject {
         this.body = world.createRigidBody(
             RAPIER.RigidBodyDesc.dynamic().setAdditionalMass(10)
                 .setLinearDamping(1)
-                .setCcdEnabled(true)
                 .setGravityScale(0.0)
         )
     
