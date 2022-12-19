@@ -4,9 +4,12 @@ import {
     TextureLoader, Scene, Mesh, sRGBEncoding, SphereGeometry, 
     DirectionalLight, PerspectiveCamera, WebGLRenderer, PCFSoftShadowMap, 
     Clock, MeshPhysicalMaterial, BufferAttribute, AmbientLight, Vector3, 
-    ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, Vector2, Raycaster, PointLight, MeshStandardMaterial
+    ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, 
+    Vector2, Raycaster, PointLight, MeshStandardMaterial, MeshMatcapMaterial, MeshBasicMaterial
 } from "three"
+import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
+import { Font, FontLoader } from "three/examples/jsm/loaders/FontLoader"
 import ChristmasPenguin from "./christmasPenguin"
 import { SnowBall, throwSnowBall } from "./snowBall"
 import Snow from "./snow"
@@ -28,19 +31,30 @@ import ChristmasLight from "./christmasLight"
 // Enable Async
 (async () => {
 
-    /** Initialzie and setup */
+    /** Initialize and setup */
     const RAPIER = await getRapier()
 
     // Loaders
     const gltfLoader = new GLTFLoader()
     const textureLoader = new TextureLoader()
- 
+    const fontLoader = new FontLoader()
+
+    // Load Font
+    const font = await new Promise<Font>((resolve, reject) => {
+        fontLoader.load(
+            "/fonts/ornamental_versals_regular.json",
+            (font) => resolve(font),
+            undefined,
+            (error) => reject(error)
+        )
+    })
+    
     // Debug
     const gui = new GUI()
     const debugObject = {
         envMapIntensity: 5,
         penguinSpeed: 5,
-        zoom: 1.05,
+        zoom: 3,
         debugPhysics: false,
         radius: 1,
         phi: 0.05
@@ -107,7 +121,7 @@ import ChristmasLight from "./christmasLight"
     /**
     * Planet Christmas
     */
-    const worldRadius = 500
+    const worldRadius = 400
     const worldRigidBody = world.createRigidBody(
         RAPIER.RigidBodyDesc.fixed()
     )
@@ -161,8 +175,33 @@ import ChristmasLight from "./christmasLight"
         gameElements[tree.collider.handle] = tree
         return tree
     }
-    const northPoleTree = createTree(1)
+    const northPoleTree = createTree(3)
     northPoleTree.setPosition(new Vector3(0, worldRadius + 2, 0))
+
+    /** Welcome Message */
+        
+    // Material
+    const material = new MeshBasicMaterial({color: 0xffffff})
+        
+    // Text
+    const textGeometry = new TextGeometry(
+        "Christmas Planet",
+        {
+            font: font,
+            size: 50,
+            height: 0.5,
+            curveSegments: 12,
+            bevelEnabled: true,
+            bevelThickness: 0.04,
+            bevelSize: 0.02,
+            bevelOffset: 0,
+            bevelSegments: 5
+        }
+    )
+    textGeometry.center()
+    const text = new Mesh(textGeometry, material)
+    text.position.set(worldRadius + 10, 0 ,0)
+    scene.add(text)
 
     /** Gifts */
     const giftModel: Group = await new Promise((resolve, reject) => {
@@ -420,7 +459,6 @@ import ChristmasLight from "./christmasLight"
         if (prevX == null) {
             prevX = e.clientX
         } else if (prevX < e.clientX) {
-            console.log(mouse.x)
             christmasPenguin.object.rotateZ((e.clientX - prevX) * 0.01)
             prevX = e.clientX
         } else if (prevX > e.clientX) {
@@ -564,6 +602,8 @@ import ChristmasLight from "./christmasLight"
     ).multiplyScalar(1.2)
     camera.position.set(newCameraPosition.x, newCameraPosition.y, newCameraPosition.z + 20)
     scene.add(camera)
+    text.lookAt(camera.position)
+    text.rotateY(Math.PI)
  
     /**
     * Renderer
@@ -735,8 +775,7 @@ import ChristmasLight from "./christmasLight"
         })
  
         // Render
-        renderer.render(scene, camera)
-        
+        renderer.render(scene, camera)        
  
         // Call tick again on the next frame
         window.requestAnimationFrame(tick)
