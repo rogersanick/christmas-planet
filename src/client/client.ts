@@ -4,14 +4,17 @@ import Stats from "stats.js"
 import { 
     TextureLoader, Scene, Mesh, sRGBEncoding, SphereGeometry, 
     DirectionalLight, PerspectiveCamera, WebGLRenderer, PCFSoftShadowMap, 
-    Clock, MeshPhysicalMaterial, BufferAttribute, AmbientLight, Vector3, 
+    Clock, MeshPhysicalMaterial, AmbientLight, Vector3, 
     ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, 
-    Vector2, Raycaster, PointLight, MeshStandardMaterial, MeshMatcapMaterial, MeshBasicMaterial
+    Vector2, Raycaster, PointLight, MeshStandardMaterial, MeshBasicMaterial, 
+    PlaneGeometry, MeshPhongMaterial, Material
 } from "three"
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
-import { Font, FontLoader } from "three/examples/jsm/loaders/FontLoader"
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader"
+import { TGALoader } from "three/examples/jsm/loaders/TGALoader"
 import ChristmasPenguin from "./christmasPenguin"
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { SnowBall, throwSnowBall } from "./snowBall"
 import Snow from "./snow"
 import { getRapier } from "./rapier"
@@ -21,6 +24,9 @@ import { RANDOM_SKY_COORDINATES, RANDOM_SPHERE_COORDINATES, RAPIER_SCALING_COEFF
 import ImageGallery from "./gallery"
 import PhysicsEnabledObject from "./physicsEnabledObject"
 import ChristmasLight from "./christmasLight"
+import { GameElements } from "./types"
+import { getOrnateFont, initFonts } from "./font"
+import gsap from "gsap"
 
 // PRIORITIZED TODO
 // TODO: Add Jim's presents + audio
@@ -37,28 +43,21 @@ import ChristmasLight from "./christmasLight"
 
     // Loaders
     const gltfLoader = new GLTFLoader()
+    const objLoader = new OBJLoader()
+    const tgaLoader = new TGALoader()
     const textureLoader = new TextureLoader()
-    const fontLoader = new FontLoader()
-
-    // Load Font
-    const font = await new Promise<Font>((resolve, reject) => {
-        fontLoader.load(
-            "/fonts/ornamental_versals_regular.json",
-            (font) => resolve(font),
-            undefined,
-            (error) => reject(error)
-        )
-    })
+    initFonts()
     
     // Debug
     const gui = new GUI()
+    gui.close()
     const debugObject = {
         envMapIntensity: 5,
-        penguinSpeed: 5,
+        penguinSpeed: 3,
         zoom: 3,
         debugPhysics: false,
         radius: 1,
-        phi: 0.05
+        phi: 0.1
     }
     gui.add(debugObject, "radius", 0, 10)
     gui.add(debugObject, "phi", 0, 3)
@@ -68,7 +67,7 @@ import ChristmasLight from "./christmasLight"
     /** Set up basic statistics */
     const stats = new Stats()
     stats.showPanel(0) // 0: fps, 1: ms, 2: mb, 3+: custom
-    document.body.appendChild(stats.dom)
+    // document.body.appendChild(stats.dom)
  
     // Canvaswa
     const canvas = document.querySelector("canvas.webgl") as HTMLElement
@@ -97,15 +96,6 @@ import ChristmasLight from "./christmasLight"
     /**
      * Game Elements
      */
-    type GameElements = { [colliderHandle: number]: GameElement }
-    type GameElement = { 
-        collider: RAPIER.Collider, 
-        body: RAPIER.RigidBody, 
-        object: Object3D, 
-        shouldRotate: boolean
-        scene: Scene,
-        world: RAPIER.World
-    }
     const gameElements: GameElements = {}
     
     /** 
@@ -155,17 +145,67 @@ import ChristmasLight from "./christmasLight"
     worldMesh.rotation.x = - Math.PI * 0.5
     worldMesh.receiveShadow = true
     scene.add(worldMesh)
- 
+
+    /**
+     * Orbiting Elements
+     */
+    const candyCaneModel: Object3D = await new Promise((resolve, reject) => {
+        gltfLoader.load("/models/candy_cane.glb", (obj) => {
+            obj.scene.scale.set(5, 5, 5)
+            resolve(obj.scene)
+        })
+    })
+    const sleightMaterial: Material = await new Promise((resolve, reject) => {
+        tgaLoader.load("/models/sleigh_col.tga", (texture) => {
+            texture.encoding = sRGBEncoding
+            const material = new MeshPhongMaterial({
+                map: texture,
+            })
+            resolve(material)
+        })
+    })
+    const sleighModel: Object3D = await new Promise((resolve, reject) => {
+        objLoader.load("/models/sleigh.obj", (obj) => {
+            obj.scale.set(0.5, 0.5, 0.5)
+            obj.children.forEach(child => {
+                if (child instanceof Mesh) {
+                    // child.geometry.center()
+                    child.material = sleightMaterial
+                }
+            })
+            resolve(obj)
+        })
+    })
+    scene.add(sleighModel)
+    const orbitingElements = [
+        {
+            offset: 0.4 + Math.random() * 0.6, 
+            model: candyCaneModel,
+            xInversion: Math.random() > 0.5 ? 1 : -1, 
+            yInversion: Math.random() > 0.5 ? 1 : -1,
+            zInversion: Math.random() > 0.5 ? 1 : -1 
+        },
+        {
+            offset: 0.4 + Math.random() * 0.6, 
+            model: sleighModel,
+            xInversion: Math.random() > 0.5 ? 1 : -1, 
+            yInversion: Math.random() > 0.5 ? 1 : -1,
+            zInversion: Math.random() > 0.5 ? 1 : -1 
+        },
+    ]
+    orbitingElements.forEach((ele) => { scene.add(ele.model) })
+
     /**
      * Christmas Tree
      */
-    const treeModel: Object3D = await new Promise((resolve, reject) => {
+    const treeModel: Object3D = await new Promise((resolve) => {
         gltfLoader.load("/models/christmas_tree.glb", (obj) => {
             obj.scene.children[0].traverse(child => {
                 if (child instanceof Mesh) {
                     child.position.y -= 5
                 }
             })
+            obj.scene.children[0].position.set(0, worldRadius + 2, 0)
             resolve(obj.scene.children[0])
         })
     })
@@ -180,28 +220,8 @@ import ChristmasLight from "./christmasLight"
         gameElements[tree.collider.handle] = tree
         return tree
     }
-    const northPoleTree = createTree(3)
+    const northPoleTree = createTree(2)
     northPoleTree.setPosition(new Vector3(0, worldRadius + 2, 0))
-
-    /** Welcome Message */
-        
-    // Material
-    const material = new MeshBasicMaterial({color: 0xffffff})
-        
-    // Text
-    const textGeometry = new TextGeometry(
-        "Christmas Planet",
-        {
-            font: font,
-            size: 50,
-            height: 0.5,
-            curveSegments: 12,
-        }
-    )
-    textGeometry.center()
-    const text = new Mesh(textGeometry, material)
-    text.position.set(worldRadius + 10, 0 ,0)
-    scene.add(text)
 
     /** Gifts */
     const giftModel: Group = await new Promise((resolve, reject) => {
@@ -230,42 +250,48 @@ import ChristmasLight from "./christmasLight"
         // Lensa Pack 1
         createGiftBox(5, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery(position, scene, textureLoader, "lensa_pack_1", 100, "JPG")
+                new ImageGallery("Lensa AI Avatar Art,\nan ai generated collection of avatars", 
+                    position, scene, textureLoader, "lensa_pack_1", 100, "JPG")
             )
         }),
 
         // Lensa Pack 2
         createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery(position, scene, textureLoader, "lensa_pack_2", 200, "JPG")
+                new ImageGallery("Lensa ai Avatars pack 1,\nan ai generated collection of avatars", 
+                    position, scene, textureLoader, "lensa_pack_2", 200, "JPG")
             )
         }),
 
         // Santa Penguin
         createGiftBox(6, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery(position, scene, textureLoader, "santa_penguin", 32, "png")
+                new ImageGallery("Santa and the Christmas penguin,\nan ai oil painting collection", 
+                    position, scene, textureLoader, "santa_penguin", 32, "png")
             )
         }),
 
         // Jess Universal
         createGiftBox(5, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery(position, scene, textureLoader, "jess_universal", 32, "png")
+                new ImageGallery("Jess on a universal background,\na collection of ai renderings", 
+                    position, scene, textureLoader, "jess_universal", 32, "png")
             )
         }),
 
         // Swing Private
         createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery(position, scene, textureLoader, "dance_private", 1, "png")
+                new ImageGallery("Private swing Dance lessons,\na headstart to our swing dance journey", 
+                    position, scene, textureLoader, "dance_private", 1, "png")
             )
         }),
 
         // Swing Public
         createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery(position, scene, textureLoader, "dance_series", 1, "png")
+                new ImageGallery("Swing dance series,\nthe first few lessons of our swing dance journey", 
+                    position, scene, textureLoader, "dance_series", 1, "png")
             )
         })
     ]
@@ -276,6 +302,30 @@ import ChristmasLight from "./christmasLight"
             RANDOM_SPHERE_COORDINATES[index][2]
         ))
     })
+
+    const createAudioPlayer = () => {
+        const audioElement = document.createElement("div")
+        audioElement.innerHTML = `
+        <audio controls>
+            <source src="jim_audio/home_for_christmas.m4a"></source>
+        </audio>
+        `
+        document.body.append(audioElement)
+    }
+
+    const createGiftBoxFractionContainer = () => {
+        const giftsFoundElement = document.createElement("div")
+        giftsFoundElement.classList.add("gifts-found")
+        giftsFoundElement.innerHTML = `
+            <img class="gifts-icon" src="gift_icon.png"><img>
+            <div id="gifts-fraction-container" class="gifts-fraction-container">
+                <div class="gifts-fraction">
+                    <sup>0</sup>&frasl;<sub>10</sub>
+                </div>
+            </div>
+        `
+        document.body.append(giftsFoundElement)
+    }
 
     const adjustGiftBoxFraction = () => {
         const fractionContainer = document.getElementById("gifts-fraction-container")
@@ -292,7 +342,6 @@ import ChristmasLight from "./christmasLight"
             </div>
         `
     }
-    adjustGiftBoxFraction()
 
     /**
     * Penguin
@@ -476,11 +525,12 @@ import ChristmasLight from "./christmasLight"
         raycaster.setFromCamera(mouse, camera)
 
         // Go forward buttons
-        const goForwardButtons = imageGalleries.map((gallery) => gallery.goForwardButton)
+        const goForwardButtons = imageGalleries.flatMap((gallery) => gallery.goForwardButton.children)
         const intersectsForward = raycaster.intersectObjects(goForwardButtons, true)
-        const intersectedForwardObjectIDs = intersectsForward.map((intersect) => intersect.object.id)
+        const intersectedForwardObjectIDs = intersectsForward.map((intersect) => intersect.object.parent 
+            && intersect.object.parent.id)
         const goForwardTargetGallery = imageGalleries.find(imageGallery => {
-            return imageGallery.frameGroup.children.find(ele => intersectedForwardObjectIDs.includes(ele.id) )
+            return intersectedForwardObjectIDs.includes(imageGallery.goForwardButton.id)
         })
 
         if (goForwardTargetGallery) {
@@ -489,11 +539,12 @@ import ChristmasLight from "./christmasLight"
         }
         
         // Go backward buttons
-        const goBackwardButtons = imageGalleries.map((gallery) => gallery.goBackwardButton)
+        const goBackwardButtons = imageGalleries.flatMap((gallery) => gallery.goBackwardButton.children)
         const intersectsBackward = raycaster.intersectObjects(goBackwardButtons, true)
-        const intersectedBackwardObjectIDs = intersectsBackward.map((intersect) => intersect.object.id)
+        const intersectedBackwardObjectIDs = intersectsBackward.map((intersect) => intersect.object.parent 
+            && intersect.object.parent.id)
         const goBackwardTargetGallery = imageGalleries.find(imageGallery => {
-            return imageGallery.frameGroup.children.find(ele => intersectedBackwardObjectIDs.includes(ele.id) )
+            return intersectedBackwardObjectIDs.includes(imageGallery.goBackwardButton.id)
         })
 
         if (goBackwardTargetGallery) {
@@ -508,7 +559,8 @@ import ChristmasLight from "./christmasLight"
         const frameGallery = imageGalleries.find(imageGallery => {
             return imageGallery.frameGroup.children.find(ele => intersectedFrameObjectIDs.includes(ele.id) )
         })
-        if (currExitViewingMode) {
+
+        if (currExitViewingMode && frameGallery) {
             currExitViewingMode()
         } else if (frameGallery) {
             enterViewingMode(frameGallery.frameGroup)
@@ -522,7 +574,7 @@ import ChristmasLight from "./christmasLight"
     directionalLight.position.set(3.5, 2, - 1.25)
     scene.add(directionalLight)
 
-    const ambientLight = new AmbientLight("#ffffff", 0.4)
+    const ambientLight = new AmbientLight("#ffffff", 0.5)
     scene.add(ambientLight)
 
     const christmasLights: ChristmasLight[] = []
@@ -535,7 +587,6 @@ import ChristmasLight from "./christmasLight"
     const makeChristmasLight = (color: number) => {
         const bulbLight = new PointLight( color, 50, 100, 0.6 )
         bulbLight.add( new Mesh( bulbGeometry, bulbMat ) )
-        bulbLight.position.set(10, worldRadius + 10, 5)
         bulbLight.castShadow = true
         const newLight = new ChristmasLight(bulbLight, scene, world)
         return newLight
@@ -543,7 +594,7 @@ import ChristmasLight from "./christmasLight"
     
     const numChristmasLights = 6
     let colorIndex = 0
-    const colors = [0xff0000, 0x00ff00, 0xFDF4DC]
+    const colors = [0xFDF4DC, 0xff0000, 0x00ff00]
     for (let i = 0; i < numChristmasLights; i++) {
         if (colorIndex < colors.length - 1) {
             colorIndex++
@@ -557,7 +608,7 @@ import ChristmasLight from "./christmasLight"
     })
     setInterval(() => {
         christmasLights[Math.floor(Math.random() * christmasLights.length)].body
-            .applyImpulse(new RAPIER.Vector3(Math.random() * 100, Math.random() * 100, Math.random() * 100), true)
+            .applyImpulse(new RAPIER.Vector3(Math.random() * 50, Math.random() * 50, Math.random() * 50), true)
     }, 2000)
  
     gui.add(directionalLight, "intensity").min(0).max(10).step(0.001).name("lightIntensity")
@@ -600,8 +651,6 @@ import ChristmasLight from "./christmasLight"
     ).multiplyScalar(1.2)
     camera.position.set(newCameraPosition.x, newCameraPosition.y, newCameraPosition.z + 20)
     scene.add(camera)
-    text.lookAt(camera.position)
-    text.rotateY(Math.PI)
  
     /**
     * Renderer
@@ -622,47 +671,12 @@ import ChristmasLight from "./christmasLight"
         scene.add(object)
     })
 
-    /** 
-     * Enter viewing mode
-     */
-    let currExitViewingMode: (() => void) | undefined
-    const enterViewingMode = (object: Object3D) => {
-        gameFunction = viewingObject
-        targetObject = object
-        const oldPosition = object.position.clone()
-        const oldRotation = object.quaternion.clone()
-        const oldZoom = debugObject.zoom
-        debugObject.zoom = 2
-        currExitViewingMode = () => {
-            exitViewingMode(object, oldPosition, oldRotation, oldZoom)
-        }
-    }
-
-    /** 
-     * Exit Viewing Mode 
-     */
-    const exitViewingMode = (
-        object: Object3D, 
-        targetObjectOriginalPosition: Vector3, 
-        targetObjectOriginalRotation: Quaternion,
-        oldZoom: number
-    ) => {
-        const { x, y, z} = targetObjectOriginalPosition
-        object.position.set(x, y, z)
-        object.rotation.setFromQuaternion(targetObjectOriginalRotation)
-        targetObject = undefined
-        currExitViewingMode = undefined
-        debugObject.zoom = oldZoom
-        gameFunction = mainGame
-    }
-
     /**
      * Animate
     */
 
     // Get time related variables
     const clock = new Clock()
-    const waddleClockwise = true
 
     // Physics, collision detection and processing queue
     const eventQueue = new RAPIER.EventQueue(true)
@@ -673,9 +687,19 @@ import ChristmasLight from "./christmasLight"
     // Viewing Target
     let targetObject: Object3D | undefined
 
-    // Main game definition
-    const spherical = new Spherical()
+    /**
+     * PRIMARY GAME DEFINITION
+     */ 
+    let mainGameSetup = false
     const mainGame = () => {
+
+        // Setup the game
+        if (!mainGameSetup) {
+            createGiftBoxFractionContainer()
+            createAudioPlayer()
+            mainGameSetup = true
+        }
+
         // Detect collision events
         eventQueue.drainCollisionEvents((handle1, handle2, started) => {
             const maybeGiftBox = gameElements[handle1]
@@ -727,24 +751,183 @@ import ChristmasLight from "./christmasLight"
         // TODO: Implement a better waddle
 
         /** Move the camera relative to the penguin */
+        const spherical = new Spherical()
         spherical.setFromVector3(object.position)
         spherical.radius += debugObject.radius
         spherical.phi += debugObject.phi
-        camera.position.setFromSpherical(spherical)
-        camera.position.multiplyScalar(debugObject.zoom)
+
+        const newPosition = new Vector3()
+            .setFromSpherical(spherical)
+            .multiplyScalar(debugObject.zoom)
+        camera.position.lerp(newPosition, 0.07)
         camera.lookAt(object.position)
     }
 
-    // Viewing mode definition
+    /**
+     * VIEWING SINGLE OBJECT MODE DEFINITION
+     */
     const viewingObject = () => {
-        targetObject?.position.lerp(new Vector3(10 * debugObject.zoom,0,0), 0.01)
+        targetObject?.position.lerp(new Vector3(1000,1000,1000), 0.01)
         targetObject!.lookAt(camera.position)
+        targetObject?.rotateY(Math.PI)
         targetObject?.rotateX(Math.PI/2)
-        camera.position.lerp(new Vector3(0,0,0), 0.01)
+        camera.position.lerp(new Vector3(1000 - 10 * debugObject.zoom, 1000, 1000), 0.01)
         camera.lookAt(targetObject!.position)
     }
 
-    gameFunction = mainGame
+    /** 
+     * Enter viewing mode
+     */
+    let currExitViewingMode: (() => void) | undefined
+    const enterViewingMode = (object: Object3D) => {
+        gameFunction = viewingObject
+        targetObject = object
+        const oldPosition = object.position.clone()
+        const oldRotation = object.quaternion.clone()
+        const oldZoom = debugObject.zoom
+        debugObject.zoom = 2
+        currExitViewingMode = () => {
+            exitViewingMode(object, oldPosition, oldRotation, oldZoom)
+        }
+    }
+    
+    /** 
+     * Exit Viewing Mode 
+     */
+    const exitViewingMode = (
+        object: Object3D, 
+        targetObjectOriginalPosition: Vector3, 
+        targetObjectOriginalRotation: Quaternion,
+        oldZoom: number
+    ) => {
+        const { x, y, z} = targetObjectOriginalPosition
+        object.position.set(x, y, z)
+        object.rotation.setFromQuaternion(targetObjectOriginalRotation)
+        targetObject = undefined
+        currExitViewingMode = undefined
+        debugObject.zoom = oldZoom
+        gameFunction = mainGame
+    }
+
+    /** 
+     * GAME START SCREEN DEFINITION
+     */
+    let gameStartScreenSetup = false
+    let gameStartScreenControls: OrbitControls | undefined
+    const gameStartScreen = async () => {
+        if (!gameStartScreenSetup) {
+            camera.position.set(worldRadius * 3, 0, 0)
+            camera.lookAt(0, 0, 0)
+            gameStartScreenControls = new OrbitControls(camera, renderer.domElement)
+            gameStartScreenControls.enableDamping = true
+            gameStartScreenControls.dampingFactor = 0.05
+            gameStartScreenSetup = true
+
+            /** Introduction Messages */
+            // Welcome message
+            const welcomeTextMaterial = new MeshBasicMaterial({color: 0xffffff})
+            const welcomeTextGeometry = new TextGeometry(
+                "Christmas Planet",
+                {
+                    font: await getOrnateFont(),
+                    size: 50,
+                    height: 0.5,
+                    curveSegments: 12,
+                }
+            )
+            welcomeTextGeometry.center()
+            const welcomeTextMesh = new Mesh(welcomeTextGeometry, welcomeTextMaterial)
+            welcomeTextMesh.position.set(worldRadius + 10, 30 ,0)
+            welcomeTextMesh.lookAt(camera.position)
+
+            // Start Button
+            const startTextMaterial = new MeshBasicMaterial({color: 0xffffff})
+            const startTextGeometry = new TextGeometry(
+                "Start",
+                {
+                    font: await getOrnateFont(),
+                    size: 20,
+                    height: 0.5,
+                    curveSegments: 12,
+                }
+            )
+            startTextGeometry.center()
+            const startTextMesh = new Mesh(startTextGeometry, startTextMaterial)
+            startTextMesh.position.set(worldRadius + 10, -30 ,0)
+            startTextMesh.lookAt(camera.position)
+
+            scene.add(welcomeTextMesh, startTextMesh)
+
+            const touchPlate = new Mesh(
+                new PlaneGeometry(100, 50),
+                new MeshBasicMaterial({color: 0x000000, transparent: true, opacity: 0})
+            )
+            touchPlate.position.set(startTextMesh.position.x, startTextMesh.position.y, startTextMesh.position.z)
+            touchPlate.lookAt(camera.position)
+            scene.add(touchPlate)
+
+            window.addEventListener("mousemove", () => {
+                    
+                // Hover Raycaster
+                raycaster.setFromCamera(mouse, camera)
+                const intersects = raycaster.intersectObjects([startTextMesh, touchPlate])
+
+                // Change color
+                if (intersects.length > 0) {
+                    startTextMaterial.color.set(0xD6001C)
+                } else {
+                    startTextMaterial.color.set(0xffffff)
+                }
+            })
+
+            window.addEventListener("mousedown", () => {
+
+                // Click Raycaster
+                raycaster.setFromCamera(mouse, camera)
+                const intersects = raycaster.intersectObjects([startTextMesh, touchPlate])
+
+                // Tear down
+                if (intersects.length > 0) {
+                    scene.remove(welcomeTextMesh, startTextMesh)
+                    welcomeTextMesh.geometry.dispose()
+                    welcomeTextMesh.material.dispose()
+                    startTextMesh.geometry.dispose()
+                    startTextMesh.material.dispose()
+                    gameStartScreenControls?.dispose()
+                    gameFunction = mainGame
+                    gsap.to(debugObject, {zoom: 1.1, duration: 3})
+                }
+            })
+        }
+        gameStartScreenControls?.update()
+    }
+
+    /** 
+     * Introduction Screen Definition
+     */
+    let introductionScreenSetup = false
+    const introductionScreen = async () => {
+        let welcomeBookPage: ImageGallery | undefined
+        if (!introductionScreenSetup) {
+            // Welcome message
+            const loader = new TextureLoader()
+            const welcomeBookPage = new ImageGallery(
+                "test", new Vector3(worldRadius * 5, 0 ,0), scene, loader, "intro", 1, "png", 300)
+            welcomeBookPage.frameGroup.lookAt(camera.position)
+            welcomeBookPage.frameGroup.rotateX(Math.PI / 2)
+            camera.position.set(worldRadius * 6.5, 0, 0)
+            camera.lookAt(welcomeBookPage.frameGroup.position)
+            introductionScreenSetup = true
+        }
+        if (welcomeBookPage) {
+            welcomeBookPage.frameGroup.lookAt(camera.position)
+            welcomeBookPage.frameGroup.rotateX(Math.PI / 2)
+            camera.lookAt(welcomeBookPage.frameGroup.position)
+        }
+    }
+
+
+    gameFunction = gameStartScreen
     
     const tick = () =>
     {
@@ -767,13 +950,25 @@ import ChristmasLight from "./christmasLight"
             const h = (360 * ((color[0] + time) % 360)) / 360
             material.color.setHSL(h, color[1], color[2])
         })
+
+        /** Orbiting Elements */ 
+        orbitingElements.forEach(({model, offset, xInversion, yInversion, zInversion}) => {
+            model.position.set(
+                xInversion * Math.cos(clock.elapsedTime * offset) * worldRadius * 1.1,
+                yInversion * Math.sin(clock.elapsedTime * offset) * worldRadius * 1.1,
+                zInversion * Math.sin(clock.elapsedTime * offset) * worldRadius * 1.1
+            )
+            model.lookAt(worldMesh.position)
+            model.rotateY(Math.PI)
+            model.rotateX(Math.PI / 2)
+        })
+
  
         // Render
         renderer.render(scene, camera)        
  
         // Call tick again on the next frame
         stats.end()
-        console.log("Number of Triangles :", renderer.info.render.triangles)
         window.requestAnimationFrame(tick)
     }
  

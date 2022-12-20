@@ -1,5 +1,8 @@
-import { DoubleSide, Group, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, 
+import { DoubleSide, Group, Material, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, 
     PlaneGeometry, Scene, SphereGeometry, TextureLoader, Vector3 } from "three"
+import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry"
+import { Font } from "three/examples/jsm/loaders/FontLoader"
+import { getOrnateFont, getTextFont } from "./font"
 
 class ImageGallery {
 
@@ -11,18 +14,27 @@ class ImageGallery {
     loader: TextureLoader
     numPhotos: number
     fileExtension: string
-    goForwardButton: Mesh
-    goBackwardButton: Mesh
+    goForwardButton: Group
+    goBackwardButton: Group
     scene: Scene
+    progressText: Mesh
+    frameSize = 12
+    title: string
+    textMaterial = new MeshBasicMaterial({color: 0xffffff})
+    behindTextMaterial = new MeshBasicMaterial({color: 0x000000, transparent: true, opacity: 0.5})
 
     constructor(
+        title: string,
         position: Vector3, 
         scene: Scene, 
         loader: TextureLoader, 
         target: string, 
         numPhotos: number, 
-        fileExtension: string
+        fileExtension: string,
+        frameSize?: number
     ) {
+
+        // Create a frame for the gallery and initialize
         this.material = new MeshBasicMaterial({
             side: DoubleSide,
         })
@@ -31,40 +43,82 @@ class ImageGallery {
         this.numPhotos = numPhotos
         this.fileExtension = fileExtension
         this.scene = scene
-        const gallerySize = 12
+        this.title = title
+        if (frameSize) { this.frameSize = frameSize }
+
+        // Create a group for frame elements
         this.frameGroup = new Group()
 
+        // Create the frame
         this.frame = new Mesh(
-            new PlaneGeometry(gallerySize, gallerySize),
+            new PlaneGeometry(this.frameSize, this.frameSize),
             this.material
         )
 
-        const buttonGeometry = new SphereGeometry(0.5, 32, 32)
-        this.goForwardButton = new Mesh(
-            buttonGeometry,
-            new MeshPhysicalMaterial({
-                color: 0x808080,
-                clearcoat: 1,
-                clearcoatRoughness: 0.1,
-            })
+        // Touch Plate geometry
+        const touchPlateGeo = new PlaneGeometry(this.frameSize/4, this.frameSize/12).rotateX(Math.PI / 2)
+
+        // Setup go forward button
+        this.goForwardButton = new Group()
+        this.goForwardButton.add(new Mesh(
+            new TextGeometry(
+                "nexT >",
+                {
+                    font: getOrnateFont(),
+                    size: this.frameSize/24,
+                    height: 0.3,
+                    curveSegments: 10,
+                }
+            ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),
+            this.textMaterial
+        ))
+        this.goForwardButton.add(
+            new Mesh(
+                touchPlateGeo,
+                this.behindTextMaterial
+            )
         )
-        this.goForwardButton.position.set(-gallerySize/2, 0, 0)
-        this.goBackwardButton = new Mesh(
-            buttonGeometry,
-            new MeshPhysicalMaterial({
-                color: 0x808080,
-                clearcoat: 1,
-                clearcoatRoughness: 0.1,
-            })
+        this.goForwardButton.position.set(-this.frameSize/3, 0, -this.frameSize/1.8)
+
+        // Setup go backward button
+        this.goBackwardButton = new Group()
+        this.goBackwardButton.add(
+            new Mesh(
+                new TextGeometry(
+                    "< Prev",
+                    {
+                        font: getOrnateFont(),
+                        size: this.frameSize/24,
+                        height: 0.3,
+                        curveSegments: 10,
+                    }
+                ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),
+                this.textMaterial
+            )
         )
-        this.goBackwardButton.position.set(gallerySize/2, 0, 0)
+        this.goBackwardButton.add(
+            new Mesh(
+                touchPlateGeo,
+                this.behindTextMaterial
+            )
+        )
+        this.goBackwardButton.position.set(this.frameSize/3, 0, -this.frameSize/1.8)
+
+        // Add the buttons and frame to the frame group
         this.frameGroup.add(this.goForwardButton, this.goBackwardButton, this.frame)
 
+        // Rotate the frame
         this.frame.rotateX(-Math.PI / 2)
+        this.frame.rotateY(Math.PI)
+
+        // Position and rotate the frame
         const framePosition = position.multiplyScalar(1.01)
         this.frameGroup.position.set(framePosition.x, framePosition.y, framePosition.z)
         this.frameGroup.lookAt(new Vector3(0, 0, 0))
-        
+
+        this.progressText = this.createProgressText()
+        this.frameGroup.add(this.progressText)
+        this.frameGroup.add(this.createTitleText())
 
         scene.add(this.frameGroup)
 
@@ -72,6 +126,50 @@ class ImageGallery {
             this.material.map = texture
             this.material.needsUpdate = true
         })
+    }
+
+    createTitleText() {
+        const newTitleText = new Mesh(
+            new TextGeometry(
+                this.title,
+                {
+                    font: getOrnateFont(),
+                    size: this.frameSize/24,
+                    height: 0.1,
+                    curveSegments: 10,
+                }
+            ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),
+            this.textMaterial
+        )
+        newTitleText.position.set(0, 0, this.frameSize/1.65)
+        return newTitleText
+    }
+
+    createProgressText() {
+        const newProgressText = new Mesh(
+            new TextGeometry(
+                `${this.photoIndex}/${this.numPhotos}`,
+                {
+                    font: getTextFont(),
+                    size: this.frameSize/20,
+                    height: 0.5,
+                    curveSegments: 12,
+                }
+            ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),
+            this.textMaterial
+        )
+        newProgressText.position.set(0, 0, -this.frameSize/1.8)
+        return newProgressText
+    }
+
+    changeProgressText() {
+        this.frameGroup.remove(this.progressText)
+        this.scene.remove(this.progressText);
+        (this.progressText.material as Material).dispose()
+        this.progressText.geometry.dispose()
+
+        this.progressText = this.createProgressText()
+        this.frameGroup.add(this.progressText)
     }
 
     navigateForward() {
@@ -84,6 +182,7 @@ class ImageGallery {
             this.material.map = texture
             this.material.needsUpdate = true
         })
+        this.changeProgressText()
     }
 
     navigateBackward() {
@@ -96,9 +195,8 @@ class ImageGallery {
             this.material.map = texture
             this.material.needsUpdate = true
         })
+        this.changeProgressText()
     }
-
-
 }
 
 export default ImageGallery

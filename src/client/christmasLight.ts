@@ -19,7 +19,7 @@ class ChristmasLight {
         this.object = object
         this.body = world.createRigidBody(
             RAPIER.RigidBodyDesc.dynamic()
-                .setLinearDamping(0.2)
+                .setLinearDamping(0.3)
                 .setCanSleep(true)
                 .setGravityScale(0.0)
         )
