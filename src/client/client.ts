@@ -930,6 +930,7 @@ import StoryPage from "./storyPage"
 
                 // Tear down
                 if (intersects.length > 0) {
+                    window.removeEventListener("mousedown", handler)
                     scene.remove(welcomeTextMesh, startTextMesh)
                     welcomeTextMesh.geometry.dispose()
                     welcomeTextMesh.material.dispose()
@@ -939,7 +940,6 @@ import StoryPage from "./storyPage"
                     gameFunction = introductionScreen
                     gsap.to(debugObject, {zoom: 50, duration: 2})
                 }
-                window.removeEventListener("mousedown", handler)
             }
             window.addEventListener("mousedown", handler)
 
