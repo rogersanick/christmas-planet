@@ -66,7 +66,7 @@ class ImageGallery {
                 {
                     font: getOrnateFont(),
                     size: this.frameSize/24,
-                    height: 0.3,
+                    height: 0.1,
                     curveSegments: 10,
                 }
             ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),
@@ -89,7 +89,7 @@ class ImageGallery {
                     {
                         font: getOrnateFont(),
                         size: this.frameSize/24,
-                        height: 0.3,
+                        height: 0.1,
                         curveSegments: 10,
                     }
                 ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),
@@ -152,7 +152,7 @@ class ImageGallery {
                 {
                     font: getTextFont(),
                     size: this.frameSize/20,
-                    height: 0.5,
+                    height: 0.1,
                     curveSegments: 12,
                 }
             ).rotateX(-Math.PI / 2).rotateZ(Math.PI).center(),

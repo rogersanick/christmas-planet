@@ -7,7 +7,7 @@ import {
     Clock, MeshPhysicalMaterial, AmbientLight, Vector3, 
     ArrowHelper, Object3D, Group, Quaternion, Box3, Spherical, 
     Vector2, Raycaster, PointLight, MeshStandardMaterial, MeshBasicMaterial, 
-    PlaneGeometry, MeshPhongMaterial, Material
+    PlaneGeometry, MeshPhongMaterial, Material, BufferGeometry, BufferAttribute, Line, LineBasicMaterial
 } from "three"
 import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js"
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"
@@ -27,6 +27,8 @@ import ChristmasLight from "./christmasLight"
 import { GameElements } from "./types"
 import { getOrnateFont, initFonts } from "./font"
 import gsap from "gsap"
+import getPathGeometry from "./sleighPath"
+import StoryPage from "./storyPage"
 
 // PRIORITIZED TODO
 // TODO: Add Jim's presents + audio
@@ -57,7 +59,7 @@ import gsap from "gsap"
         zoom: 3,
         debugPhysics: false,
         radius: 1,
-        phi: 0.1
+        phi: 0.1,
     }
     gui.add(debugObject, "radius", 0, 10)
     gui.add(debugObject, "phi", 0, 3)
@@ -187,13 +189,25 @@ import gsap from "gsap"
         },
         {
             offset: 0.4 + Math.random() * 0.6, 
-            model: sleighModel,
+            model: candyCaneModel.clone(),
             xInversion: Math.random() > 0.5 ? 1 : -1, 
             yInversion: Math.random() > 0.5 ? 1 : -1,
             zInversion: Math.random() > 0.5 ? 1 : -1 
         },
     ]
     orbitingElements.forEach((ele) => { scene.add(ele.model) })
+
+    /** 
+     * Sleigh Path
+     */
+    const sleighPath = getPathGeometry(1000, worldRadius * 1.5, worldRadius / 3, 32)
+    // For future path rendering
+    // const sleighPathMaterial = new LineBasicMaterial({ color: 0x0000ff })
+    // const sleighGeo = new BufferGeometry()
+    // sleighGeo.setFromPoints(sleighPath.getSpacedPoints(2000))
+    // const line = new Line(sleighGeo)
+    // line.material = sleighPathMaterial
+    // scene.add(line)
 
     /**
      * Christmas Tree
@@ -220,7 +234,7 @@ import gsap from "gsap"
         gameElements[tree.collider.handle] = tree
         return tree
     }
-    const northPoleTree = createTree(2)
+    const northPoleTree = createTree(3)
     northPoleTree.setPosition(new Vector3(0, worldRadius + 2, 0))
 
     /** Gifts */
@@ -250,16 +264,32 @@ import gsap from "gsap"
         // Lensa Pack 1
         createGiftBox(5, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery("Lensa AI Avatar Art,\nan ai generated collection of avatars", 
-                    position, scene, textureLoader, "lensa_pack_1", 100, "JPG")
+                new ImageGallery("ai Avatars Part 1,\nan ai generated collection of avatars", 
+                    position, scene, textureLoader, "lensa_pack_1", 59, "JPG")
+            )
+        }),
+
+        // Lensa Pack 1 Bloopers
+        createGiftBox(4, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery("ai Avatar Bloopers Part 1,\nSome ai generated avatars that turned out... weird.", 
+                    position, scene, textureLoader, "lensa_pack_1_bloopers", 41, "JPG")
             )
         }),
 
         // Lensa Pack 2
         createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery("Lensa ai Avatars pack 1,\nan ai generated collection of avatars", 
-                    position, scene, textureLoader, "lensa_pack_2", 200, "JPG")
+                new ImageGallery("ai Avatars Part 2,\nan ai generated collection of avatars", 
+                    position, scene, textureLoader, "lensa_pack_2", 119, "JPG")
+            )
+        }),
+
+        // Lensa Pack 2 Bloopers
+        createGiftBox(4, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery("ai Avatars Bloopers Part 2,\nSome ai generated avatars that turned out... weird.", 
+                    position, scene, textureLoader, "lensa_pack_2_bloopers", 81, "JPG")
             )
         }),
 
@@ -293,6 +323,14 @@ import gsap from "gsap"
                 new ImageGallery("Swing dance series,\nthe first few lessons of our swing dance journey", 
                     position, scene, textureLoader, "dance_series", 1, "png")
             )
+        }),
+
+        // Jim Audio Gift
+        createGiftBox(4, (position: Vector3) => {
+            imageGalleries.push(
+                new ImageGallery("Audio by Jim Wolvington,\nBeautiful, thoughtful atmosphere for Christmas Planet", 
+                    position, scene, textureLoader, "jim_gift", 2, "png")
+            )
         })
     ]
     giftBoxes.forEach((giftBox, index) => {
@@ -306,11 +344,12 @@ import gsap from "gsap"
     const createAudioPlayer = () => {
         const audioElement = document.createElement("div")
         audioElement.innerHTML = `
-        <audio controls>
+        <audio id="audio-player" controls style="display:none;">
             <source src="jim_audio/home_for_christmas.m4a"></source>
         </audio>
         `
-        document.body.append(audioElement)
+        document.body.append(audioElement);
+        (document.getElementById("audio-player") as HTMLAudioElement).play()
     }
 
     const createGiftBoxFractionContainer = () => {
@@ -320,7 +359,7 @@ import gsap from "gsap"
             <img class="gifts-icon" src="gift_icon.png"><img>
             <div id="gifts-fraction-container" class="gifts-fraction-container">
                 <div class="gifts-fraction">
-                    <sup>0</sup>&frasl;<sub>10</sub>
+                    <sup>0</sup>&frasl;<sub>${giftBoxes.length}</sub>
                 </div>
             </div>
         `
@@ -422,7 +461,7 @@ import gsap from "gsap"
         if (jump && jumpCount < 2) {
             jumpCount++
             const jumpVector = new Vector3().subVectors(
-                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 90)
+                object.position, worldMesh.position).normalize().multiplyScalar(debugObject.penguinSpeed * 150)
             const jumpCannonVector = new RAPIER.Vector3(jumpVector.x, jumpVector.y, jumpVector.z)
             body.applyImpulse(jumpCannonVector, true)
             jump = false
@@ -489,8 +528,10 @@ import gsap from "gsap"
     {
         const penguinDistanceToCenterOfPlanet = christmasPenguin.object.position.distanceTo(worldMesh.position)
         const cameraDistanceToCenterOfPlanet = camera.position.distanceTo(worldMesh.position)
+        console.log(debugObject.zoom)
         if (debugObject.zoom < 100 
-            && (penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet || gameFunction === viewingObject)) {
+            && (penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet 
+                || gameFunction === viewingObject || gameFunction === introductionScreen)) {
             debugObject.zoom += e.deltaY * 0.0003
             gui.updateDisplay()
         } else if (e.deltaY > 0) {
@@ -561,6 +602,7 @@ import gsap from "gsap"
         })
 
         if (currExitViewingMode && frameGallery) {
+            console.log("exit viewing mode")
             currExitViewingMode()
         } else if (frameGallery) {
             enterViewingMode(frameGallery.frameGroup)
@@ -696,7 +738,6 @@ import gsap from "gsap"
         // Setup the game
         if (!mainGameSetup) {
             createGiftBoxFractionContainer()
-            createAudioPlayer()
             mainGameSetup = true
         }
 
@@ -704,8 +745,10 @@ import gsap from "gsap"
         eventQueue.drainCollisionEvents((handle1, handle2, started) => {
             const maybeGiftBox = gameElements[handle1]
             if (maybeGiftBox && maybeGiftBox instanceof GiftBox && !maybeGiftBox.opened) {
-                maybeGiftBox.openPresent()
-                adjustGiftBoxFraction()
+                setTimeout(() => {
+                    maybeGiftBox.openPresent()
+                    adjustGiftBoxFraction()
+                }, 1000)
             }
         })
 
@@ -816,7 +859,7 @@ import gsap from "gsap"
     let gameStartScreenControls: OrbitControls | undefined
     const gameStartScreen = async () => {
         if (!gameStartScreenSetup) {
-            camera.position.set(worldRadius * 3, 0, 0)
+            camera.position.set(worldRadius * 3, worldRadius, 0)
             camera.lookAt(0, 0, 0)
             gameStartScreenControls = new OrbitControls(camera, renderer.domElement)
             gameStartScreenControls.enableDamping = true
@@ -827,7 +870,7 @@ import gsap from "gsap"
             // Welcome message
             const welcomeTextMaterial = new MeshBasicMaterial({color: 0xffffff})
             const welcomeTextGeometry = new TextGeometry(
-                "Christmas Planet",
+                "Planet Christmas",
                 {
                     font: await getOrnateFont(),
                     size: 50,
@@ -837,7 +880,7 @@ import gsap from "gsap"
             )
             welcomeTextGeometry.center()
             const welcomeTextMesh = new Mesh(welcomeTextGeometry, welcomeTextMaterial)
-            welcomeTextMesh.position.set(worldRadius + 10, 30 ,0)
+            welcomeTextMesh.position.set(worldRadius + 10, worldRadius / 3,0)
             welcomeTextMesh.lookAt(camera.position)
 
             // Start Button
@@ -853,7 +896,7 @@ import gsap from "gsap"
             )
             startTextGeometry.center()
             const startTextMesh = new Mesh(startTextGeometry, startTextMaterial)
-            startTextMesh.position.set(worldRadius + 10, -30 ,0)
+            startTextMesh.position.set(worldRadius + 10, worldRadius / 3 -70 ,0)
             startTextMesh.lookAt(camera.position)
 
             scene.add(welcomeTextMesh, startTextMesh)
@@ -880,8 +923,7 @@ import gsap from "gsap"
                 }
             })
 
-            window.addEventListener("mousedown", () => {
-
+            const handler = () => {
                 // Click Raycaster
                 raycaster.setFromCamera(mouse, camera)
                 const intersects = raycaster.intersectObjects([startTextMesh, touchPlate])
@@ -894,10 +936,13 @@ import gsap from "gsap"
                     startTextMesh.geometry.dispose()
                     startTextMesh.material.dispose()
                     gameStartScreenControls?.dispose()
-                    gameFunction = mainGame
-                    gsap.to(debugObject, {zoom: 1.1, duration: 3})
+                    gameFunction = introductionScreen
+                    gsap.to(debugObject, {zoom: 50, duration: 2})
                 }
-            })
+                window.removeEventListener("mousedown", handler)
+            }
+            window.addEventListener("mousedown", handler)
+
         }
         gameStartScreenControls?.update()
     }
@@ -906,24 +951,125 @@ import gsap from "gsap"
      * Introduction Screen Definition
      */
     let introductionScreenSetup = false
+    const introductionText = [
+        "welcome to Christmas Planet",
+        "This is the story of how Santa\nand the Christmas Penguin",
+        "worked together to deliver the merriest\n of Christmases to all the boys and girls.",
+        "But specifically to Jessica wolvington,\nwho sits at the tippy top of the nice list.",
+        "not many know this, but presents are\nActually no longer made on earth.",
+        "ever since remote work became the norm,\nSanta moved full time to planet Christmas.",
+        "So that he could live the christmas lifestyle,\nall year round'.",
+        "Santa, the Christmas Penguin, the elves\nand now You are the only ones who know this.",
+        "who is the Christmas Penguin you ask",
+        "well, the Christmas Penguin is a Penguin\nthat lives on Planet Christmas.",
+        "And one of Santa's old drinking buddies.",
+        "A really good drinking buddy.",
+        "everything was going swimmingly\n...until this year.",
+        "On the night before Christmas,\nall was seemingly lost.",
+        "Santa had loaded up his sleigh with gifts,\nready to depart from Christmas Planet.",
+        "but Then, red alert. major malfunction\nin santa's sleigh's engine.",
+        "Santa was stuck in orbit\ncircling Planet Christmas.",
+        "In order to break out of orbit,\nSanta needed to jettison some gifts.",
+        "As the nicest person on earth, Jessica's presents\nwere at the top of Santa's Sack.",
+        "so in a panic, Santa jettisoned jessica's presents\ninto the atmosphere of Christmas Planet.",
+        "The presents fell to the ground\nand scattered all over the planet.",
+        "Santa Shouted - Christmas Penguin, i need your help.\nI need you to find Jessica's presents.",
+        "The Christmas Penguin, being the great friend\nthat he is, agreed to help Santa.",
+        "but the Christmas Penguin needs your help too.",
+        "use the Arrow Keys to move the Christmas Penguin\nand collect Jessica's presents.",
+        "Collect presents by simply bumping into them.",
+        "Their contents will then be revealed.",
+        "click the revealed present to enter\nviewing mode.",
+        "Once in viewing mode, click the\nrevealed presents content again to zoom out.",
+        "Use two fingers on the track pad\nto zoom in and out.",
+        "Once you have collected all of Jessica's presents,\nthe Christmas Penguin will deliver them.",
+        "For technical support, call your husband,\nhe's on the nice list as well, but just barely.",
+        "Merry Christmas and good luck.\nClick the picture to get started."
+    ]
+    const loader = new TextureLoader()
+    const introductionChristmasStory = new StoryPage(
+        introductionText, new Vector3(worldRadius * 5, 0 ,0), scene, loader, "intro_story", 33, "png", 300)
     const introductionScreen = async () => {
-        let welcomeBookPage: ImageGallery | undefined
+        
         if (!introductionScreenSetup) {
-            // Welcome message
-            const loader = new TextureLoader()
-            const welcomeBookPage = new ImageGallery(
-                "test", new Vector3(worldRadius * 5, 0 ,0), scene, loader, "intro", 1, "png", 300)
-            welcomeBookPage.frameGroup.lookAt(camera.position)
-            welcomeBookPage.frameGroup.rotateX(Math.PI / 2)
-            camera.position.set(worldRadius * 6.5, 0, 0)
-            camera.lookAt(welcomeBookPage.frameGroup.position)
+
+            // Start playing music
+            createAudioPlayer()
+
+            // Set up complete
             introductionScreenSetup = true
+            
+            // Add a timeout before detecting mouse position to ensure transition
+            setTimeout(() => {
+                const handler = () => {
+
+                    // Click Raycaster
+                    raycaster.setFromCamera(mouse, camera)
+                    const intersects = raycaster.intersectObjects(
+                        [introductionChristmasStory.goForwardButton, 
+                            introductionChristmasStory.goBackwardButton, introductionChristmasStory.frame])
+    
+                    // Tear down
+                    const frameIntersected = intersects.find(intersect => 
+                        intersect.object === introductionChristmasStory.frame)
+                    if (frameIntersected 
+                        && introductionChristmasStory.photoIndex === introductionChristmasStory.numPhotos) {
+                        scene.remove(introductionChristmasStory.frameGroup)
+                        introductionChristmasStory.frameGroup.children.forEach(child => {
+                            if (child instanceof Mesh) {
+                                child.geometry.dispose()
+                                child.material.dispose()
+                            } else if (child instanceof Group) {
+                                child.children.forEach(grandchild => {
+                                    if (grandchild instanceof Mesh) {
+                                        grandchild.geometry.dispose()
+                                        grandchild.material.dispose()
+                                    }
+                                })
+                            }
+                            
+                        })
+                        gameStartScreenControls?.dispose()
+                        window.removeEventListener("mousedown", handler)
+                        gameFunction = mainGame
+                        gsap.to(debugObject, {zoom: 1.1, duration: 1})
+                    }
+    
+                    // Go Forward
+                    const goForwardButtons = introductionChristmasStory.goForwardButton.children
+                    const intersectsForward = raycaster.intersectObjects(goForwardButtons, true)
+                    const intersectedForwardObjectIDs = intersectsForward.map((intersect) => intersect.object.parent 
+                        && intersect.object.parent.id)
+                
+    
+                    if (intersectedForwardObjectIDs.includes(introductionChristmasStory.goForwardButton.id)) {
+                        introductionChristmasStory.navigateForward()
+                        return
+                    }
+            
+                    // Go Backward
+                    const goBackwardButtons = introductionChristmasStory.goBackwardButton.children
+                    const intersectsBackward = raycaster.intersectObjects(goBackwardButtons, true)
+                    const intersectedBackwardObjectIDs = intersectsBackward.map((intersect) => intersect.object.parent 
+                && intersect.object.parent.id)
+    
+                    if (intersectedBackwardObjectIDs.includes(introductionChristmasStory.goBackwardButton.id)) {
+                        introductionChristmasStory.navigateBackward()
+                        return
+                    }
+                }
+                window.addEventListener("mousedown", handler)
+            }, 2050)
+
         }
-        if (welcomeBookPage) {
-            welcomeBookPage.frameGroup.lookAt(camera.position)
-            welcomeBookPage.frameGroup.rotateX(Math.PI / 2)
-            camera.lookAt(welcomeBookPage.frameGroup.position)
-        }
+
+        // Set positions and rotations
+        introductionChristmasStory.frameGroup.position.lerp(new Vector3(1000,1000,1000), 0.01)
+        introductionChristmasStory.frameGroup.lookAt(camera.position)
+        introductionChristmasStory.frameGroup.rotateY(Math.PI)
+        introductionChristmasStory.frameGroup.rotateX(Math.PI/2)
+        camera.position.lerp(new Vector3(1000 - 11 * debugObject.zoom, 1000, 1000), 0.01)
+        camera.lookAt(introductionChristmasStory.frameGroup.position)
     }
 
 
@@ -962,6 +1108,13 @@ import gsap from "gsap"
             model.rotateY(Math.PI)
             model.rotateX(Math.PI / 2)
         })
+        
+        /** Santa Sleigh */
+        const sleighPosition = sleighPath.getPoint(time * 0.05)
+        sleighModel.position.lerp(
+            sleighPosition, 0.5
+        )
+        sleighModel.lookAt(sleighPath.getPoint((time + 0.01) * 0.05))
 
  
         // Render
