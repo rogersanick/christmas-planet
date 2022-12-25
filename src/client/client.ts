@@ -698,6 +698,7 @@ import StoryPage from "./storyPage"
     * Renderer
     */
     const renderer = new WebGLRenderer({
+        antialias: true,
         canvas: canvas,
     })
 
