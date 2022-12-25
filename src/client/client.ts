@@ -328,8 +328,9 @@ import StoryPage from "./storyPage"
         // Jim Audio Gift
         createGiftBox(4, (position: Vector3) => {
             imageGalleries.push(
-                new ImageGallery("Audio by Jim Wolvington,\nBeautiful, thoughtful atmosphere for Christmas Planet", 
-                    position, scene, textureLoader, "jim_gift", 2, "png")
+                new ImageGallery("Audio by Jim Wolvington,\nBeautiful, thoughtful"
+                + "atmosphere for Christmas Planet\nHit the 1, 2 or 3 keys to change the song", 
+                position, scene, textureLoader, "jim_gift", 2, "png")
             )
         })
     ]
@@ -341,11 +342,25 @@ import StoryPage from "./storyPage"
         ))
     })
 
+    let songIndex = 0
+    const songs = [
+        "walking_in_air",
+        "home_for_christmas",
+        "silent_night",
+    ]
+
+    let audioElement: HTMLElement | undefined
     const createAudioPlayer = () => {
-        const audioElement = document.createElement("div")
+        if (audioElement) {
+            (document.getElementById("audio-player") as HTMLAudioElement).pause()
+            audioElement.parentNode?.removeChild(audioElement)
+            audioElement = undefined
+        }
+        audioElement = document.createElement("div")
+        audioElement.id = "audio-player-container"
         audioElement.innerHTML = `
-        <audio id="audio-player" controls style="display:none;">
-            <source src="jim_audio/home_for_christmas.m4a"></source>
+        <audio id="audio-player" loop controls style="display:none;">
+            <source src="jim_audio/${songs[songIndex]}.m4a"></source>
         </audio>
         `
         document.body.append(audioElement);
@@ -440,6 +455,17 @@ import StoryPage from "./storyPage"
         } else if (inputKey === " ") {
             jump = true
         }
+
+        if (inputKey === "1") {
+            songIndex = 0
+            createAudioPlayer()
+        } else if (inputKey === "2") {
+            songIndex = 1
+            createAudioPlayer()
+        } else if (inputKey === "3") {
+            songIndex = 2
+            createAudioPlayer()
+        }
     })
 
     window.addEventListener("keyup", function(event) {
@@ -528,7 +554,6 @@ import StoryPage from "./storyPage"
     {
         const penguinDistanceToCenterOfPlanet = christmasPenguin.object.position.distanceTo(worldMesh.position)
         const cameraDistanceToCenterOfPlanet = camera.position.distanceTo(worldMesh.position)
-        console.log(debugObject.zoom)
         if (debugObject.zoom < 100 
             && (penguinDistanceToCenterOfPlanet < cameraDistanceToCenterOfPlanet 
                 || gameFunction === viewingObject || gameFunction === introductionScreen)) {
