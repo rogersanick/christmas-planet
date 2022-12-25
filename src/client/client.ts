@@ -982,13 +982,15 @@ import StoryPage from "./storyPage"
         "click the revealed present to enter\nviewing mode.",
         "Once in viewing mode, click the\nrevealed presents content again to zoom out.",
         "Use two fingers on the track pad\nto zoom in and out.",
+        "Your progress in collecting Jessica's\npresents will be tracked here.",
         "Once you have collected all of Jessica's presents,\nthe Christmas Penguin will deliver them.",
         "For technical support, call your husband,\nhe's on the nice list as well, but just barely.",
         "Merry Christmas and good luck.\nClick the picture to get started."
     ]
     const loader = new TextureLoader()
     const introductionChristmasStory = new StoryPage(
-        introductionText, new Vector3(worldRadius * 5, 0 ,0), scene, loader, "intro_story", 33, "png", 300)
+        introductionText, new Vector3(worldRadius * 5, 0 ,0), 
+        scene, loader, "intro_story", introductionText.length, "png", 300)
     const introductionScreen = async () => {
         
         if (!introductionScreenSetup) {
